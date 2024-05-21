@@ -1,0 +1,131 @@
+run:
+  deadline: 3m
+  tests: true
+
+  skip-dirs:
+    - data$
+    - vendor$
+    - mock$
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: false
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+    check-shadowing: true
+    settings:
+      printf:
+        funcs:
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Infof
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Warnf
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Errorf
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Fatalf
+  gofmt:
+    simplify: true
+  goimports:
+    local-prefixes: github.com/golangci/golangci-lint
+  cyclop:
+    max-complexity: 20
+  maligned:
+    suggest-new: true
+  dupl:
+    threshold: 100
+  goconst:
+    min-len: 3
+    min-occurrences: 2
+  depguard:
+    list-type: blacklist
+    include-go-root: false
+    packages:
+      - github.com/davecgh/go-spew/spew
+  misspell:
+    locale: US
+  lll:
+    line-length: 120
+    tab-width: 1
+  nlreturn:
+    block-size: 2
+  gocritic:
+    enabled-tags:
+      - performance
+      - style
+      - experimental
+    disabled-checks:
+      - dupImport # https://github.com/go-critic/go-critic/issues/845
+    settings:
+      captLocal:
+        paramsOnly: true
+      rangeValCopy:
+        sizeThreshold: 64
+  revive:
+    # see https://github.com/mgechev/revive#available-rules for details.
+    ignore-generated-header: true
+    severity: warning
+    rules:
+      - name: add-constant
+        severity: info
+      - name: indent-error-flow
+        severity: warning
+      - name: add-constant
+        severity: warning
+        arguments:
+          - maxLitCount: "3"
+            allowStrs: '"","err",","'
+            allowInts: "0,1,2,3,10"
+            allowFloats: "0.0,0.,1.0,1.,2.0,2."
+  gomnd:
+    ignored-numbers:
+      - '0'
+      - '1'
+      - '2'
+      
+linters:
+  enable-all: true
+  disable:
+    - nonamedreturns
+    - depguard
+    - exhaustivestruct # replaced with exhaustruct
+    - gochecknoglobals
+    - interfacer
+    - maligned
+    - varnamelen
+    - dupl
+    - gci # conflict with gofumpt https://github.com/golangci/golangci-lint/issues/1490
+    - scopelint # Replaced by exportloopref
+    - deadcode # Replaced by unused
+    - golint # Replaced by revive
+    - nosnakecase # Replaced by revive(var-naming)
+    - varcheck # Replaced by unused
+    - ifshort # Deprecated
+    - structcheck # Replaced by unused
+    - gochecknoinits
+
+issues:
+  exclude-rules:
+    - text: "weak cryptographic primitive"
+      linters:
+        - gosec
+    # Exclude unuseful linter
+    - path: .go
+      linters:
+        - godox
+        - tagliatelle
+    # Exclude some linters from running on tests files.
+    - path: _test\.go
+      linters:
+        - revive
+        - testpackage
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - funlen
+        - exhaustruct
