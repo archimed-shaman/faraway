@@ -1,0 +1,9 @@
+---
+
+log:
+
+net:
+  host: 0.0.0.0
+  port: 9090
+  buff_size: 1024
+  timeout: 1s

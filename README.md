@@ -14,7 +14,7 @@ Design and implement “Word of Wisdom” tcp server.
 Build & run:
 ```sh
 docker build . -f Dockerfile.server -t faraway-wow-server
-docker run faraway-wow-server
+docker run -p 9090:9090 faraway-wow-server
 ```
 
 ### Client

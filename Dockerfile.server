@@ -36,6 +36,7 @@ COPY --from=builder /bin/faraway-wow-server /bin/faraway-wow-server
 COPY --from=builder /lib /lib
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY conf/ /etc/faraway/wow/conf/
 
 EXPOSE 9090
 ENTRYPOINT ["/bin/faraway-wow-server"]
