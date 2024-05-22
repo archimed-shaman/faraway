@@ -51,8 +51,12 @@ func main() {
 	cfg := config.Get()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	srv := server.New(cfg.Net.BuffSize, time.Duration(cfg.Net.Timeout),
-		func() server.Logic { return logic.New() })
+
+	logicAllocator := func(askStop func(), send func(ctx context.Context, data []byte) error) server.Logic {
+		return logic.New(askStop, send)
+	}
+
+	srv := server.New(cfg.Net.BuffSize, time.Duration(cfg.Net.Timeout), logicAllocator)
 
 	var wg sync.WaitGroup
 

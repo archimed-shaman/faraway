@@ -14,27 +14,28 @@ import (
 	"go.uber.org/zap"
 )
 
-type Logic interface {
-	Handle(ctx context.Context, req []byte) error
-}
+type (
+	LogicAllocator func(askStop func(), send func(ctx context.Context, data []byte) error) Logic
+	Logic          interface {
+		Handle(ctx context.Context, req []byte) error
+	}
+)
 
 type Server struct {
-	bufferPool  sync.Pool
-	handlerPool sync.Pool
-	timeout     time.Duration
-	wg          sync.WaitGroup
+	bufferPool sync.Pool
+	timeout    time.Duration
+	allocLogic LogicAllocator
+	wg         sync.WaitGroup
 }
 
-func New(buffSize int, timeout time.Duration, allocLogic func() Logic) *Server {
+func New(buffSize int, timeout time.Duration, allocLogic LogicAllocator) *Server {
 	return &Server{
 		bufferPool: sync.Pool{
 			New: func() any { return make([]byte, buffSize) },
 		},
-		handlerPool: sync.Pool{
-			New: func() any { return allocLogic() },
-		},
-		timeout: timeout,
-		wg:      sync.WaitGroup{},
+		timeout:    timeout,
+		allocLogic: allocLogic,
+		wg:         sync.WaitGroup{},
 	}
 }
 
@@ -65,7 +66,7 @@ func (s *Server) Run(ctx context.Context, host string, port int) error {
 				break
 			}
 
-			zap.L().Warn("Failed to accept client connection", zap.Error(err))
+			zap.L().Debug("Failed to accept client connection", zap.Error(err))
 
 			return pkgerr.Wrap(err, "Server failed to accept client")
 		}
@@ -84,17 +85,17 @@ func (s *Server) Run(ctx context.Context, host string, port int) error {
 
 func (s *Server) accept(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
-	defer recoverFromPanic()
 	defer s.wg.Done()
+	defer recoverFromPanic()
 
 	buff := s.getBuffer()
 	defer s.putBuffer(buff)
 
-	handler := s.getHandler()
-	defer s.putHandler(handler)
+	clientCtx, cancel := context.WithCancel(ctx)
+	handler := s.allocLogic(cancel, getSender(conn, s.timeout))
 
 	zap.L().Info("New client connected", zap.String("addr", conn.RemoteAddr().String()))
-	handleClient(ctx, conn, s.timeout, buff, handler.Handle)
+	handleClient(clientCtx, conn, s.timeout, buff, handler.Handle)
 	zap.L().Info("Client disconnected", zap.String("addr", conn.RemoteAddr().String()))
 }
 
@@ -113,19 +114,19 @@ func (s *Server) putBuffer(buff []byte) {
 	s.bufferPool.Put(buff) //nolint:staticcheck // slice is the reference type
 }
 
-func (s *Server) getHandler() Logic { //nolint:ireturn // Concrete type is unknown here
-	obj := s.handlerPool.Get()
+func getSender(conn net.Conn, timeout time.Duration) func(ctx context.Context, data []byte) error {
+	return func(ctx context.Context, data []byte) error {
+		if err := conn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+			return pkgerr.Wrap(err, "failed to set write deadline for the connection")
+		}
 
-	handler, ok := obj.(Logic)
-	if !ok {
-		panic("unexpected object in handler pool: " + describeObj(obj))
+		// Assuming all data is sent on success. Anyway more complicated logic can be implemented
+		if _, err := conn.Write(data); err != nil {
+			return pkgerr.Wrap(err, "failed to write data")
+		}
+
+		return nil
 	}
-
-	return handler
-}
-
-func (s *Server) putHandler(handler Logic) {
-	s.handlerPool.Put(handler)
 }
 
 func recoverFromPanic() {
