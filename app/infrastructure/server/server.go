@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	pkgerr "github.com/pkg/errors"
@@ -22,20 +23,22 @@ type (
 )
 
 type Server struct {
-	bufferPool sync.Pool
-	timeout    time.Duration
-	allocLogic LogicAllocator
-	wg         sync.WaitGroup
+	maxConnections int32
+	bufferPool     sync.Pool
+	timeout        time.Duration
+	allocLogic     LogicAllocator
+	count          atomic.Int32
+	wg             sync.WaitGroup
 }
 
-func New(buffSize int, timeout time.Duration, allocLogic LogicAllocator) *Server {
+func New(buffSize int, maxConnections int32, timeout time.Duration, allocLogic LogicAllocator) *Server {
 	return &Server{
-		bufferPool: sync.Pool{
-			New: func() any { return make([]byte, buffSize) },
-		},
-		timeout:    timeout,
-		allocLogic: allocLogic,
-		wg:         sync.WaitGroup{},
+		maxConnections: maxConnections,
+		bufferPool:     sync.Pool{New: func() any { return make([]byte, buffSize) }},
+		timeout:        timeout,
+		allocLogic:     allocLogic,
+		count:          atomic.Int32{},
+		wg:             sync.WaitGroup{},
 	}
 }
 
@@ -55,6 +58,8 @@ func (s *Server) Run(ctx context.Context, host string, port int) error {
 		}
 	}()
 
+	s.count.Store(0)
+
 	for {
 		// Accept a new connection
 		conn, err := listener.Accept()
@@ -71,11 +76,13 @@ func (s *Server) Run(ctx context.Context, host string, port int) error {
 			return pkgerr.Wrap(err, "Server failed to accept client")
 		}
 
+		s.wg.Add(1)
+		count := s.count.Add(1)
+
 		// It is assumed that Go routines are efficient enough to run one for each client.
 		// However, if necessary for further optimization, a pre-allocated reusable pool of goroutines
 		// may be used here.
-		s.wg.Add(1)
-		go s.accept(ctx, conn)
+		go s.accept(ctx, conn, count)
 	}
 
 	s.wg.Wait() // Wait for graceful shutdown
@@ -83,19 +90,25 @@ func (s *Server) Run(ctx context.Context, host string, port int) error {
 	return nil
 }
 
-func (s *Server) accept(ctx context.Context, conn net.Conn) {
+func (s *Server) accept(ctx context.Context, conn net.Conn, count int32) {
 	defer conn.Close()
 	defer s.wg.Done()
 	defer recoverFromPanic()
+	defer s.count.Add(-1)
+
+	if count > s.maxConnections {
+		// TODO: some verbose response can be send before disconnect
+		return
+	}
 
 	buff := s.getBuffer()
 	defer s.putBuffer(buff)
 
 	clientCtx, cancel := context.WithCancel(ctx)
-	handler := s.allocLogic(cancel, getSender(conn, s.timeout))
+	logic := s.allocLogic(cancel, getSender(conn, s.timeout))
 
 	zap.L().Info("New client connected", zap.String("addr", conn.RemoteAddr().String()))
-	handleClient(clientCtx, conn, s.timeout, buff, handler.Handle)
+	handleClient(clientCtx, conn, s.timeout, buff, logic.Handle)
 	zap.L().Info("Client disconnected", zap.String("addr", conn.RemoteAddr().String()))
 }
 

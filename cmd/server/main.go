@@ -56,7 +56,7 @@ func main() {
 		return logic.New(askStop, send)
 	}
 
-	srv := server.New(cfg.Net.BuffSize, time.Duration(cfg.Net.Timeout), logicAllocator)
+	srv := server.New(cfg.Net.BuffSize, cfg.Net.MaxConnection, time.Duration(cfg.Net.Timeout), logicAllocator)
 
 	var wg sync.WaitGroup
 
