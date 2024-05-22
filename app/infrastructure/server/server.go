@@ -5,28 +5,36 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"reflect"
 	"runtime"
 	"sync"
+	"time"
 
 	pkgerr "github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
-type ReusableAcceptor interface {
-	Accept(ctx context.Context, conn net.Conn)
+type Logic interface {
+	Handle(ctx context.Context, req []byte) error
 }
 
 type Server struct {
-	acceptorPool sync.Pool
-	wg           sync.WaitGroup
+	bufferPool  sync.Pool
+	handlerPool sync.Pool
+	timeout     time.Duration
+	wg          sync.WaitGroup
 }
 
-func New(allocator func() ReusableAcceptor) *Server {
+func New(buffSize int, timeout time.Duration, allocLogic func() Logic) *Server {
 	return &Server{
-		acceptorPool: sync.Pool{
-			New: func() any { return allocator() },
+		bufferPool: sync.Pool{
+			New: func() any { return make([]byte, buffSize) },
 		},
-		wg: sync.WaitGroup{},
+		handlerPool: sync.Pool{
+			New: func() any { return allocLogic() },
+		},
+		timeout: timeout,
+		wg:      sync.WaitGroup{},
 	}
 }
 
@@ -66,7 +74,7 @@ func (s *Server) Run(ctx context.Context, host string, port int) error {
 		// However, if necessary for further optimization, a pre-allocated reusable pool of goroutines
 		// may be used here.
 		s.wg.Add(1)
-		go s.handleConnection(ctx, conn)
+		go s.accept(ctx, conn)
 	}
 
 	s.wg.Wait() // Wait for graceful shutdown
@@ -74,21 +82,53 @@ func (s *Server) Run(ctx context.Context, host string, port int) error {
 	return nil
 }
 
-func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
+func (s *Server) accept(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
-	defer s.recoverFromPanic()
+	defer recoverFromPanic()
 	defer s.wg.Done()
 
-	acceptor := s.getAcceptor()
+	buff := s.getBuffer()
+	defer s.putBuffer(buff)
 
-	defer s.putAcceptor(acceptor)
+	handler := s.getHandler()
+	defer s.putHandler(handler)
 
-	zap.L().Info("New client accepted", zap.String("addr", conn.RemoteAddr().String()))
-	acceptor.Accept(ctx, conn)
+	zap.L().Info("New client connected", zap.String("addr", conn.RemoteAddr().String()))
+	handleClient(ctx, conn, s.timeout, buff, handler.Handle)
 	zap.L().Info("Client disconnected", zap.String("addr", conn.RemoteAddr().String()))
 }
 
-func (s *Server) recoverFromPanic() {
+func (s *Server) getBuffer() []byte {
+	obj := s.bufferPool.Get()
+
+	buff, ok := obj.([]byte)
+	if !ok {
+		panic("unexpected object in acceptor pool: " + describeObj(obj))
+	}
+
+	return buff
+}
+
+func (s *Server) putBuffer(buff []byte) {
+	s.bufferPool.Put(buff) //nolint:staticcheck // slice is the reference type
+}
+
+func (s *Server) getHandler() Logic { //nolint:ireturn // Concrete type is unknown here
+	obj := s.handlerPool.Get()
+
+	handler, ok := obj.(Logic)
+	if !ok {
+		panic("unexpected object in handler pool: " + describeObj(obj))
+	}
+
+	return handler
+}
+
+func (s *Server) putHandler(handler Logic) {
+	s.handlerPool.Put(handler)
+}
+
+func recoverFromPanic() {
 	const maxBuffer = 2048
 
 	if err := recover(); err != nil {
@@ -98,17 +138,10 @@ func (s *Server) recoverFromPanic() {
 	}
 }
 
-func (s *Server) getAcceptor() ReusableAcceptor { //nolint:ireturn // Concrete type is unknown here
-	// A check for the maximum number of connections can be implemented to prevent resource
-	// exhaustion during DDoS attacks.
-	acceptor, ok := s.acceptorPool.Get().(ReusableAcceptor)
-	if !ok {
-		panic("unexpected object in client pool")
+func describeObj(obj any) string {
+	if obj == nil {
+		return "nil"
 	}
 
-	return acceptor
-}
-
-func (s *Server) putAcceptor(acceptor ReusableAcceptor) {
-	s.acceptorPool.Put(acceptor)
+	return reflect.TypeOf(obj).String()
 }

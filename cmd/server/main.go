@@ -4,7 +4,6 @@ import (
 	"context"
 	"faraway/wow/app/infrastructure/config"
 	"faraway/wow/app/infrastructure/server"
-	"faraway/wow/app/infrastructure/server/acceptor"
 	"faraway/wow/app/usecase/server/logic"
 	"os"
 	"os/signal"
@@ -52,13 +51,8 @@ func main() {
 	cfg := config.Get()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	srv := server.New(func() server.ReusableAcceptor {
-		return acceptor.New(
-			logic.New(),
-			cfg.Net.BuffSize,
-			time.Duration(cfg.Net.Timeout),
-		)
-	})
+	srv := server.New(cfg.Net.BuffSize, time.Duration(cfg.Net.Timeout),
+		func() server.Logic { return logic.New() })
 
 	var wg sync.WaitGroup
 
