@@ -4,7 +4,7 @@ import (
 	"context"
 	"faraway/wow/app/infrastructure/config"
 	"faraway/wow/app/infrastructure/server"
-	"faraway/wow/app/usecase/server/logic"
+	"faraway/wow/app/interface/service/client"
 	"os"
 	"os/signal"
 	"sync"
@@ -52,9 +52,7 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	logicAllocator := func(askStop func(), send func(ctx context.Context, data []byte) error) server.Logic {
-		return logic.New(askStop, send)
-	}
+	logicAllocator := func() server.Service { return client.NewService(cfg.Net.BuffSize) }
 
 	srv := server.New(cfg.Net.BuffSize, cfg.Net.MaxConnection, time.Duration(cfg.Net.Timeout), logicAllocator)
 

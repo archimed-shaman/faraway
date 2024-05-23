@@ -15,28 +15,19 @@ import (
 	"go.uber.org/zap"
 )
 
-type (
-	LogicAllocator func(askStop func(), send func(ctx context.Context, data []byte) error) Logic
-	Logic          interface {
-		Handle(ctx context.Context, req []byte) error
-	}
-)
-
 type Server struct {
 	maxConnections int32
-	bufferPool     sync.Pool
+	servicePool    sync.Pool
 	timeout        time.Duration
-	allocLogic     LogicAllocator
 	count          atomic.Int32
 	wg             sync.WaitGroup
 }
 
-func New(buffSize int, maxConnections int32, timeout time.Duration, allocLogic LogicAllocator) *Server {
+func New(buffSize int, maxConnections int32, timeout time.Duration, allocService func() Service) *Server {
 	return &Server{
 		maxConnections: maxConnections,
-		bufferPool:     sync.Pool{New: func() any { return make([]byte, buffSize) }},
+		servicePool:    sync.Pool{New: func() any { return allocService() }},
 		timeout:        timeout,
-		allocLogic:     allocLogic,
 		count:          atomic.Int32{},
 		wg:             sync.WaitGroup{},
 	}
@@ -101,45 +92,27 @@ func (s *Server) accept(ctx context.Context, conn net.Conn, count int32) {
 		return
 	}
 
-	buff := s.getBuffer()
-	defer s.putBuffer(buff)
-
-	clientCtx, cancel := context.WithCancel(ctx)
-	logic := s.allocLogic(cancel, getSender(conn, s.timeout))
+	service := s.getService()
+	defer s.putService(service)
 
 	zap.L().Info("New client connected", zap.String("addr", conn.RemoteAddr().String()))
-	handleClient(clientCtx, conn, s.timeout, buff, logic.Handle)
+	handleClient(ctx, conn, s.timeout, service)
 	zap.L().Info("Client disconnected", zap.String("addr", conn.RemoteAddr().String()))
 }
 
-func (s *Server) getBuffer() []byte {
-	obj := s.bufferPool.Get()
+func (s *Server) getService() Service {
+	obj := s.servicePool.Get()
 
-	buff, ok := obj.([]byte)
+	service, ok := obj.(Service)
 	if !ok {
 		panic("unexpected object in acceptor pool: " + describeObj(obj))
 	}
 
-	return buff
+	return service
 }
 
-func (s *Server) putBuffer(buff []byte) {
-	s.bufferPool.Put(buff) //nolint:staticcheck // slice is the reference type
-}
-
-func getSender(conn net.Conn, timeout time.Duration) func(ctx context.Context, data []byte) error {
-	return func(ctx context.Context, data []byte) error {
-		if err := conn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
-			return pkgerr.Wrap(err, "failed to set write deadline for the connection")
-		}
-
-		// Assuming all data is sent on success. Anyway more complicated logic can be implemented
-		if _, err := conn.Write(data); err != nil {
-			return pkgerr.Wrap(err, "failed to write data")
-		}
-
-		return nil
-	}
+func (s *Server) putService(service Service) {
+	s.servicePool.Put(service)
 }
 
 func recoverFromPanic() {
