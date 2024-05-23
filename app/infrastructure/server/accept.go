@@ -28,15 +28,15 @@ func handleClient(ctx context.Context, conn net.Conn, timeout time.Duration, han
 	writer := NewWriter(conn, timeout)
 	reader := NewReader(conn)
 
-	if err := handler.OnConnect(ctx, writer); err != nil {
-		switch {
-		case err == nil:
-		case errors.Is(err, io.EOF):
-			return
-		default:
-			zap.L().Debug("Error handling OnConnect", zap.Error(err))
-			return
-		}
+	err := handler.OnConnect(ctx, writer)
+
+	switch {
+	case err == nil:
+	case errors.Is(err, io.EOF):
+		return
+	default:
+		zap.L().Debug("Error handling OnConnect", zap.Error(err))
+		return
 	}
 
 	defer handler.OnDisconnect(ctx)
@@ -56,19 +56,11 @@ func handleClient(ctx context.Context, conn net.Conn, timeout time.Duration, han
 
 			switch {
 			case err == nil: // Everything is ok, just read data
-			// case errors.Is(err, os.ErrDeadlineExceeded): // No data received
 			case errors.Is(err, io.EOF):
-				// 	zap.L().Info("Connection closed by client", zap.String("addr", conn.RemoteAddr().String()))
 				return
 			default:
 				zap.L().Debug("Error processing data from connection", zap.Error(err))
 				return
-				// 	zap.L().Error("Error reading from connection", zap.Error(err))
-				// 	return
-				// }
-
-				// if err := handler(ctx, buffer[:n]); err != nil {
-				// 	return
 			}
 		}
 	}

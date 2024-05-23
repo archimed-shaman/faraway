@@ -23,6 +23,7 @@ func NewService(buffSize int) *Service {
 
 func (s *Service) OnConnect(ctx context.Context, w server.ResponseWriter) error {
 	_, err := w.Write(ctx, []byte("Welcome, to the real world!"))
+
 	switch {
 	case err == nil:
 	case errors.Is(err, io.EOF):
@@ -48,7 +49,9 @@ func (s *Service) OnData(ctx context.Context, r server.ResponseReader, w server.
 		return pkgerr.Wrap(err, "client service failed read data from the connection")
 	}
 
-	w.Write(ctx, s.buff[:n])
+	if _, err := w.Write(ctx, s.buff[:n]); err != nil {
+		return pkgerr.Wrap(err, "client service failed write data to the connection")
+	}
 
 	return io.EOF
 }

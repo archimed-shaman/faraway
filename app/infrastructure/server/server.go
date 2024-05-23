@@ -100,7 +100,7 @@ func (s *Server) accept(ctx context.Context, conn net.Conn, count int32) {
 	zap.L().Info("Client disconnected", zap.String("addr", conn.RemoteAddr().String()))
 }
 
-func (s *Server) getService() Service {
+func (s *Server) getService() Service { //nolint:ireturn //It's just getter, no way to return pointer
 	obj := s.servicePool.Get()
 
 	service, ok := obj.(Service)
