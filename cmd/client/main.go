@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	jsonC "faraway/wow/app/interface/service/codec/json"
 	"faraway/wow/pkg/pow"
 	"faraway/wow/pkg/protocol"
@@ -13,6 +12,8 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+const BuffSize = 1024
 
 type Encoder interface {
 	Marshal(v any) ([]byte, error)
@@ -28,10 +29,8 @@ type Codec interface {
 }
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	logLevel := os.Getenv("LOG_LEVEL")
+
 	level, err := zapcore.ParseLevel(logLevel)
 	if err != nil {
 		// TODO: warning
@@ -42,7 +41,7 @@ func main() {
 
 	zap.ReplaceGlobals(logger)
 
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	codec := jsonC.NewCodec()
 
@@ -56,7 +55,7 @@ func main() {
 	logger.Info("Connected to server")
 
 	// Read initial challenge request
-	challengeReq, err := readData[protocol.ChallengeReq](ctx, conn, codec)
+	challengeReq, err := readData[protocol.ChallengeReq](conn, codec)
 	if err != nil {
 		logger.Fatal("Failed to connect to server", zap.Error(err))
 	}
@@ -66,7 +65,7 @@ func main() {
 		logger.Fatal("Failed to find solution for challenge", zap.Error(err))
 	}
 
-	if err := writeData(ctx, conn, codec, &protocol.ChallengeResp{
+	if err = writeData(conn, codec, &protocol.ChallengeResp{
 		Challenge:  challengeReq.Challenge,
 		Difficulty: challengeReq.Difficulty,
 		Solution:   solution,
@@ -75,7 +74,7 @@ func main() {
 	}
 
 	// Read initial challenge request
-	data, err := readData[protocol.Data](ctx, conn, codec)
+	data, err := readData[protocol.Data](conn, codec)
 	if err != nil {
 		logger.Fatal("Failed to get data from server", zap.Error(err))
 	}
@@ -85,8 +84,8 @@ func main() {
 	logger.Info("Client shutting down")
 }
 
-func readData[A any](ctx context.Context, conn net.Conn, codec Codec) (*A, error) {
-	buffer := make([]byte, 1024)
+func readData[A any](conn net.Conn, codec Codec) (*A, error) {
+	buffer := make([]byte, BuffSize)
 
 	if err := conn.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
 		return nil, pkgerr.Wrap(err, "failed to set read timeout")
@@ -106,7 +105,7 @@ func readData[A any](ctx context.Context, conn net.Conn, codec Codec) (*A, error
 	return &inst, nil
 }
 
-func writeData[A any](ctx context.Context, conn net.Conn, codec Codec, obj *A) error {
+func writeData[A any](conn net.Conn, codec Codec, obj *A) error {
 	byteObj, err := codec.Marshal(obj)
 	if err != nil {
 		return pkgerr.Wrap(err, "failed to marshal data")
