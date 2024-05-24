@@ -37,9 +37,16 @@ CONFIG=conf/server.yaml go run cmd/server/main.go
 CONFIG=conf/client.yaml go run cmd/client/main.go
 ```
 
-Check the [documentation](https://golangci-lint.run/welcome/install/#local-installation) if you don't know how to install *golangci-lint*.
+Check the [documentation](https://golangci-lint.run/welcome/install/#local-installation) if you don't know how to install **golangci-lint**.
 
 ### Server
+Server expects the following environment variables:
+      * **LOG_LEVEL** - Logging level (*error*, *warning*, *info*, *debug*), default is *info*
+      * **HOST** - host to listen on
+      * **PORT** - TCP port to listen
+
+Configuration file is located at `conf/server.yaml`.
+
 Build & run:
 ```sh
 docker build . -f Dockerfile.server -t faraway-wow-server

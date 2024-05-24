@@ -8,6 +8,7 @@ import (
 	"faraway/wow/app/interface/service/client"
 	jsonC "faraway/wow/app/interface/service/codec/json"
 	"faraway/wow/app/interface/service/ddos"
+	"faraway/wow/app/usecase/logic"
 	"os"
 	"os/signal"
 	"sync"
@@ -62,9 +63,10 @@ func main() {
 
 	ddosGuard := ddos.NewGuard()
 	codec := jsonC.NewCodec()
+	userLogic := logic.New()
 
 	logicAllocator := func() server.Service {
-		return client.NewService(cfg.Net.BuffSize, codec, ddosGuard)
+		return client.NewService(cfg.Net.BuffSize, userLogic, codec, ddosGuard)
 	}
 
 	srv := server.New(cfg.Net.BuffSize, cfg.Net.MaxConnection, time.Duration(cfg.Net.Timeout), logicAllocator)

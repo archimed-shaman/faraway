@@ -30,6 +30,7 @@ func TestService_OnConnect(t *testing.T) {
 
 	mockCodec := mock.NewMockCodec(ctrl)
 	mockDDoSGuard := mock.NewMockDDoSGuard(ctrl)
+	mockLogic := mock.NewMockUserLogic(ctrl)
 	mockWriter := mockServer.NewMockResponseWriter(ctrl)
 
 	var challenge []byte
@@ -52,7 +53,7 @@ func TestService_OnConnect(t *testing.T) {
 		})
 	mockWriter.EXPECT().Write(gomock.Any(), mockedChallenge).Return(len(mockedChallenge), nil)
 
-	s := NewService(buffSize, mockCodec, mockDDoSGuard)
+	s := NewService(buffSize, mockLogic, mockCodec, mockDDoSGuard)
 
 	err := s.OnConnect(context.Background(), mockWriter)
 
@@ -60,6 +61,8 @@ func TestService_OnConnect(t *testing.T) {
 	test.Check(t, "OnConnect challenge", challenge, s.challenge)
 	test.Check(t, "OnConnect difficulty", difficulty, s.difficulty)
 }
+
+// TODO: add more tests to check errors from different interfaces
 
 func TestService_OnData(t *testing.T) {
 	t.Parallel()
@@ -69,6 +72,7 @@ func TestService_OnData(t *testing.T) {
 
 	mockCodec := mock.NewMockCodec(ctrl)
 	mockDDoSGuard := mock.NewMockDDoSGuard(ctrl)
+	mockLogic := mock.NewMockUserLogic(ctrl)
 	mockReader := mockServer.NewMockResponseReader(ctrl)
 	mockWriter := mockServer.NewMockResponseWriter(ctrl)
 
@@ -103,7 +107,13 @@ func TestService_OnData(t *testing.T) {
 			return nil
 		})
 
-	data := protocol.Data{}
+	quote := "Word of Wisdom quote"
+
+	mockLogic.EXPECT().GetQuote(gomock.Any()).Return(quote, nil)
+
+	data := protocol.Data{
+		Payload: []byte(quote),
+	}
 	mockedData := []byte("mocked data")
 
 	mockCodec.EXPECT().Marshal(gomock.Any()).
@@ -121,7 +131,7 @@ func TestService_OnData(t *testing.T) {
 
 	mockWriter.EXPECT().Write(gomock.Any(), mockedData).Return(len(mockedData), nil)
 
-	s := NewService(buffSize, mockCodec, mockDDoSGuard)
+	s := NewService(buffSize, mockLogic, mockCodec, mockDDoSGuard)
 	s.challenge = challenge
 	s.difficulty = difficulty
 
@@ -135,10 +145,13 @@ func TestService_OnDisconnect(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	mockCodec := mock.NewMockCodec(ctrl)
 	mockDDoSGuard := mock.NewMockDDoSGuard(ctrl)
+	mockLogic := mock.NewMockUserLogic(ctrl)
+
 	mockDDoSGuard.EXPECT().DecRate(gomock.Any()).Return(int64(5), nil).Times(1)
 
-	s := NewService(1024, nil, mockDDoSGuard)
+	s := NewService(1024, mockLogic, mockCodec, mockDDoSGuard)
 	s.challenge = []byte("challenge")
 	s.difficulty = 5
 

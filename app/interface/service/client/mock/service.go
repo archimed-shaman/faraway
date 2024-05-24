@@ -195,3 +195,41 @@ func (mr *MockCodecMockRecorder) Unmarshal(data, v any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unmarshal", reflect.TypeOf((*MockCodec)(nil).Unmarshal), data, v)
 }
+
+// MockUserLogic is a mock of UserLogic interface.
+type MockUserLogic struct {
+	ctrl     *gomock.Controller
+	recorder *MockUserLogicMockRecorder
+}
+
+// MockUserLogicMockRecorder is the mock recorder for MockUserLogic.
+type MockUserLogicMockRecorder struct {
+	mock *MockUserLogic
+}
+
+// NewMockUserLogic creates a new mock instance.
+func NewMockUserLogic(ctrl *gomock.Controller) *MockUserLogic {
+	mock := &MockUserLogic{ctrl: ctrl}
+	mock.recorder = &MockUserLogicMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockUserLogic) EXPECT() *MockUserLogicMockRecorder {
+	return m.recorder
+}
+
+// GetQuote mocks base method.
+func (m *MockUserLogic) GetQuote(ctx context.Context) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetQuote", ctx)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetQuote indicates an expected call of GetQuote.
+func (mr *MockUserLogicMockRecorder) GetQuote(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQuote", reflect.TypeOf((*MockUserLogic)(nil).GetQuote), ctx)
+}

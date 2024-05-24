@@ -38,6 +38,10 @@ type Codec interface {
 	Decoder
 }
 
+type UserLogic interface {
+	GetQuote(ctx context.Context) (string, error)
+}
+
 type Service struct {
 	buff       []byte
 	challenge  []byte
@@ -45,9 +49,10 @@ type Service struct {
 
 	codec Codec
 	ddos  DDoSGuard
+	logic UserLogic
 }
 
-func NewService(buffSize int, codec Codec, ddos DDoSGuard) *Service {
+func NewService(buffSize int, logic UserLogic, codec Codec, ddos DDoSGuard) *Service {
 	return &Service{
 		buff:       make([]byte, buffSize),
 		challenge:  nil,
@@ -55,6 +60,7 @@ func NewService(buffSize int, codec Codec, ddos DDoSGuard) *Service {
 
 		codec: codec,
 		ddos:  ddos,
+		logic: logic,
 	}
 }
 
@@ -112,11 +118,15 @@ func (s *Service) OnData(ctx context.Context, r server.ResponseReader, w server.
 	// For the production use here must be a check if any other data is expected.
 	var challengeResp protocol.ChallengeResp
 	if err = s.codec.Unmarshal(s.buff[:n], &challengeResp); err != nil {
+		zap.L().Debug("Failed to unmarshal quote", zap.Error(err))
+		s.sendErrorResponse(ctx, w, "Bad response")
+
 		return pkgerr.Wrap(err, "client service failed to unmarshal challenge response")
 	}
 
 	ok, err := pow.CheckSolution(s.challenge, challengeResp.Solution, s.difficulty)
 	if err != nil {
+		s.sendErrorResponse(ctx, w, "Bad challenge resolution")
 		return pkgerr.Wrap(err, "client service failed to check challenge solution")
 	}
 
@@ -132,8 +142,16 @@ func (s *Service) OnData(ctx context.Context, r server.ResponseReader, w server.
 		return io.EOF
 	}
 
+	quote, err := s.logic.GetQuote(ctx)
+	if err != nil {
+		zap.L().Error("Failed to get quote from user logic", zap.Error(err))
+		s.sendErrorResponse(ctx, w, "Internal error")
+
+		return pkgerr.Wrap(err, "client service failed to get quote")
+	}
+
 	data, err := s.codec.Marshal(&protocol.Data{
-		Payload: s.buff[:n], // FIXME
+		Payload: []byte(quote),
 	})
 	if err != nil {
 		return pkgerr.Wrap(err, "client service failed to marshal data")
