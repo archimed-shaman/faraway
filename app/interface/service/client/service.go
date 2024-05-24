@@ -67,14 +67,16 @@ func (s *Service) OnConnect(ctx context.Context, w server.ResponseWriter) error 
 	}
 
 	challengeReq, err := s.mkChallengeReq(rate)
-	if err != nil { // TODO: send error response to client
-		zap.L().Error("Failed make challenge request", zap.Error(err))
-		return io.EOF
+	if err != nil {
+		zap.L().Error("Failed to make challenge request", zap.Error(err))
+		s.sendErrorResponse(ctx, w, "Failed to make challenge request")
+
+		return err
 	}
 
 	s.challenge, s.difficulty = challengeReq.Challenge, challengeReq.Difficulty
 
-	byteReq, err := s.codec.Marshal(&challengeReq)
+	byteReq, err := s.codec.Marshal(challengeReq)
 	if err != nil {
 		return pkgerr.Wrap(err, "client service failed to marshal challenge request")
 	}
@@ -87,7 +89,7 @@ func (s *Service) OnConnect(ctx context.Context, w server.ResponseWriter) error 
 		zap.L().Info("Connection closed by client")
 		return io.EOF
 	default:
-		return pkgerr.Wrap(err, "client service failed send challenge request to client")
+		return pkgerr.Wrap(err, "client service failed to send challenge request to client")
 	}
 
 	return nil
@@ -103,11 +105,13 @@ func (s *Service) OnData(ctx context.Context, r server.ResponseReader, w server.
 		zap.L().Info("Connection closed by client")
 	default:
 		zap.L().Debug("Error reading data from connection", zap.Error(err))
-		return pkgerr.Wrap(err, "client service failed read data from the connection")
+		return pkgerr.Wrap(err, "client service failed to read data from the connection")
 	}
 
+	// Assuming the buffer is enough to receive the response at once.
+	// For the production use here must be a check if any other data is expected.
 	var challengeResp protocol.ChallengeResp
-	if err := s.codec.Unmarshal(s.buff[:n], &challengeResp); err != nil {
+	if err = s.codec.Unmarshal(s.buff[:n], &challengeResp); err != nil {
 		return pkgerr.Wrap(err, "client service failed to unmarshal challenge response")
 	}
 
@@ -117,11 +121,14 @@ func (s *Service) OnData(ctx context.Context, r server.ResponseReader, w server.
 	}
 
 	if !ok {
-		zap.L().Debug("Bad chalenge, disconnection response",
+		zap.L().Debug("Bad challenge, disconnection response",
 			zap.ByteString("challenge", s.challenge),
 			zap.ByteString("solution", challengeResp.Solution),
 			zap.Int("difficulty", s.difficulty),
 		)
+
+		s.sendErrorResponse(ctx, w, "Bad challenge resolution")
+
 		return io.EOF
 	}
 
@@ -133,7 +140,7 @@ func (s *Service) OnData(ctx context.Context, r server.ResponseReader, w server.
 	}
 
 	if _, err := w.Write(ctx, data); err != nil {
-		return pkgerr.Wrap(err, "client service failed write data to the connection")
+		return pkgerr.Wrap(err, "client service failed to write data to the connection")
 	}
 
 	return io.EOF
@@ -149,7 +156,7 @@ func (s *Service) OnDisconnect(ctx context.Context) {
 }
 
 func (s *Service) mkChallengeReq(rate int64) (*protocol.ChallengeReq, error) {
-	difficulty := int(rate) // In case of overflow, we will fix it at the next line
+	difficulty := int(rate)
 	if rate > maxDifficulty || rate <= 0 {
 		difficulty = maxDifficulty
 	}
@@ -159,10 +166,22 @@ func (s *Service) mkChallengeReq(rate int64) (*protocol.ChallengeReq, error) {
 		return nil, pkgerr.Wrap(err, "client service failed to generate challenge")
 	}
 
-	challengeReq := protocol.ChallengeReq{
+	return &protocol.ChallengeReq{
 		Challenge:  challenge,
 		Difficulty: difficulty,
+	}, nil
+}
+
+func (s *Service) sendErrorResponse(ctx context.Context, w server.ResponseWriter, msg string) {
+	errResp := protocol.ErrorResp{Reason: msg}
+
+	data, err := s.codec.Marshal(&errResp)
+	if err != nil {
+		zap.L().Error("Failed to marshal error response", zap.Error(err))
+		return
 	}
 
-	return &challengeReq, nil
+	if _, err := w.Write(ctx, data); err != nil {
+		zap.L().Error("Failed to send error response", zap.Error(err))
+	}
 }

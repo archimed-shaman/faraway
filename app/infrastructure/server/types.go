@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+//go:generate mockgen -source=$GOFILE -destination=mock/$GOFILE
 type ResponseWriter interface {
 	// os.ErrDeadlineExceeded may be returned on write operations
 	Write(ctx context.Context, data []byte) (int, error)

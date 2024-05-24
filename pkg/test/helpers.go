@@ -12,7 +12,7 @@ func Nil(t *testing.T, what string, got any) {
 	t.Helper()
 
 	if !cmp.Equal(nil, got) {
-		t.Errorf("%s expected: [nil], got: [%v]", what, spew.Sdump(got))
+		t.Errorf("%s expected: [nil], got: [%v]", what, got)
 	}
 }
 
