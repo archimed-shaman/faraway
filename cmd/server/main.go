@@ -4,6 +4,7 @@ import (
 	"context"
 	"faraway/wow/app/infrastructure/config"
 	"faraway/wow/app/infrastructure/server"
+	"faraway/wow/app/infrastructure/version"
 	"faraway/wow/app/interface/service/client"
 	jsonC "faraway/wow/app/interface/service/codec/json"
 	"faraway/wow/app/interface/service/ddos"
@@ -44,7 +45,12 @@ func init() {
 }
 
 func main() {
-	zap.L().Info("Running Word Of Wisdom server")
+	zap.L().Info("Running Word Of Wisdom server",
+		zap.String("name", version.GetProductName()),
+		zap.String("version", version.GetVersion()),
+		zap.String("build_date", version.GetDate()),
+		zap.String("git", version.GetGit()),
+	)
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT)

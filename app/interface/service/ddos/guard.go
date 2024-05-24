@@ -2,16 +2,19 @@ package ddos
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 )
 
 type DDoSGuard struct {
-	count atomic.Int64
+	count    atomic.Int64
+	initOnce sync.Once
 }
 
 func NewGuard() *DDoSGuard {
 	return &DDoSGuard{
-		count: atomic.Int64{},
+		count:    atomic.Int64{},
+		initOnce: sync.Once{},
 	}
 }
 

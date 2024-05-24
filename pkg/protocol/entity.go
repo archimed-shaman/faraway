@@ -8,7 +8,7 @@ type ChallengeReq struct {
 type ChallengeResp struct {
 	Challenge  []byte `json:"challenge"`
 	Difficulty int    `json:"difficulty"`
-	Resolution []byte `json:"resolution"`
+	Solution   []byte `json:"solution"`
 }
 
 type ErrorResp struct {
