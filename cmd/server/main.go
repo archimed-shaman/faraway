@@ -5,6 +5,8 @@ import (
 	"faraway/wow/app/infrastructure/config"
 	"faraway/wow/app/infrastructure/server"
 	"faraway/wow/app/interface/service/client"
+	jsonC "faraway/wow/app/interface/service/codec/json"
+	"faraway/wow/app/interface/service/ddos"
 	"os"
 	"os/signal"
 	"sync"
@@ -52,7 +54,12 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	logicAllocator := func() server.Service { return client.NewService(cfg.Net.BuffSize) }
+	ddosGuard := ddos.NewGuard()
+	codec := jsonC.NewCodec()
+
+	logicAllocator := func() server.Service {
+		return client.NewService(cfg.Net.BuffSize, codec, ddosGuard)
+	}
 
 	srv := server.New(cfg.Net.BuffSize, cfg.Net.MaxConnection, time.Duration(cfg.Net.Timeout), logicAllocator)
 
