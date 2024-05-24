@@ -3,30 +3,17 @@ package server
 import (
 	"context"
 	"errors"
+	"faraway/wow/app/infrastructure/server/types"
 	"io"
 	"net"
 	"time"
 
-	pkgerr "github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
-func (w *Writer) Write(ctx context.Context, data []byte) (int, error) {
-	if err := w.conn.SetWriteDeadline(time.Now().Add(w.timeout)); err != nil {
-		return 0, pkgerr.Wrap(err, "failed to set write timeout")
-	}
-
-	n, err := w.conn.Write(data)
-	if err != nil {
-		return n, pkgerr.Wrap(err, "response writer failed to write data")
-	}
-
-	return n, nil
-}
-
 func handleClient(ctx context.Context, conn net.Conn, timeout time.Duration, handler Service) {
-	writer := NewWriter(conn, timeout)
-	reader := NewReader(conn)
+	writer := types.NewWriter(conn, timeout)
+	reader := types.NewReader(conn)
 
 	err := handler.OnConnect(ctx, writer)
 

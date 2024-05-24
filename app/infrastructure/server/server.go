@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"faraway/wow/app/infrastructure/server/types"
 	"fmt"
 	"net"
 	"reflect"
@@ -14,6 +15,19 @@ import (
 	pkgerr "github.com/pkg/errors"
 	"go.uber.org/zap"
 )
+
+//go:generate mockgen -source=$GOFILE -destination=mock/$GOFILE
+
+type Service interface {
+	// io.EOF is expected as the signal of end of processing.
+	OnConnect(ctx context.Context, w types.ResponseWriter) error
+
+	// Connection will be served until err is nil.
+	// io.EOF is expected as the signal of end of processing.
+	OnData(ctx context.Context, r types.ResponseReader, w types.ResponseWriter) error
+
+	OnDisconnect(ctx context.Context)
+}
 
 type Server struct {
 	maxConnections int32

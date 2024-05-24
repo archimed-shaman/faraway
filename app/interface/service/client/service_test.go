@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	mockServer "faraway/wow/app/infrastructure/server/mock"
+	mockServer "faraway/wow/app/infrastructure/server/types/mock"
 	mock "faraway/wow/app/interface/service/client/mock"
 	"faraway/wow/pkg/protocol"
 	"faraway/wow/pkg/test"

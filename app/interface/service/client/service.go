@@ -3,7 +3,7 @@ package client
 import (
 	"context"
 	"errors"
-	"faraway/wow/app/infrastructure/server"
+	serverTypes "faraway/wow/app/infrastructure/server/types"
 	"faraway/wow/pkg/pow"
 	"faraway/wow/pkg/protocol"
 	"io"
@@ -64,7 +64,7 @@ func NewService(buffSize int, logic UserLogic, codec Codec, ddos DDoSGuard) *Ser
 	}
 }
 
-func (s *Service) OnConnect(ctx context.Context, w server.ResponseWriter) error {
+func (s *Service) OnConnect(ctx context.Context, w serverTypes.ResponseWriter) error {
 	rate, err := s.ddos.IncRate(ctx)
 	if err != nil {
 		zap.L().Error("Failed to increase current rate", zap.Error(err))
@@ -95,7 +95,7 @@ func (s *Service) OnConnect(ctx context.Context, w server.ResponseWriter) error 
 	return nil
 }
 
-func (s *Service) OnData(ctx context.Context, r server.ResponseReader, w server.ResponseWriter) error {
+func (s *Service) OnData(ctx context.Context, r serverTypes.ResponseReader, w serverTypes.ResponseWriter) error {
 	n, err := r.Data().Read(s.buff)
 	if hErr := handleReadError(err); hErr != nil {
 		return hErr
@@ -178,7 +178,8 @@ func (s *Service) mkChallengeReq(rate int64) (*protocol.ChallengeReq, error) {
 	}, nil
 }
 
-func (s *Service) sendErrorResponse(ctx context.Context, w server.ResponseWriter, msg string) {
+func (s *Service) sendErrorResponse(ctx context.Context, w serverTypes.ResponseWriter, msg string) {
+	// Fixed set of error codes would be better
 	errResp := protocol.ErrorResp{Reason: msg}
 
 	data, err := s.codec.Marshal(&errResp)
