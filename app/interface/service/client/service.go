@@ -88,14 +88,8 @@ func (s *Service) OnConnect(ctx context.Context, w server.ResponseWriter) error 
 	}
 
 	_, err = w.Write(ctx, byteReq)
-
-	switch {
-	case err == nil:
-	case errors.Is(err, io.EOF):
-		zap.L().Info("Connection closed by client")
-		return io.EOF
-	default:
-		return pkgerr.Wrap(err, "client service failed to send challenge request to client")
+	if hErr := handleWriteError(err); hErr != nil {
+		return hErr
 	}
 
 	return nil
@@ -103,15 +97,8 @@ func (s *Service) OnConnect(ctx context.Context, w server.ResponseWriter) error 
 
 func (s *Service) OnData(ctx context.Context, r server.ResponseReader, w server.ResponseWriter) error {
 	n, err := r.Data().Read(s.buff)
-
-	switch {
-	case err == nil: // Everything is ok, just read data
-	case errors.Is(err, os.ErrDeadlineExceeded) || n == 0: // No data received
-	case errors.Is(err, io.EOF):
-		zap.L().Info("Connection closed by client")
-	default:
-		zap.L().Debug("Error reading data from connection", zap.Error(err))
-		return pkgerr.Wrap(err, "client service failed to read data from the connection")
+	if hErr := handleReadError(err); hErr != nil {
+		return hErr
 	}
 
 	// Assuming the buffer is enough to receive the response at once.
@@ -157,8 +144,9 @@ func (s *Service) OnData(ctx context.Context, r server.ResponseReader, w server.
 		return pkgerr.Wrap(err, "client service failed to marshal data")
 	}
 
-	if _, err := w.Write(ctx, data); err != nil {
-		return pkgerr.Wrap(err, "client service failed to write data to the connection")
+	_, err = w.Write(ctx, data)
+	if hErr := handleWriteError(err); hErr != nil {
+		return hErr
 	}
 
 	return io.EOF
@@ -202,4 +190,32 @@ func (s *Service) sendErrorResponse(ctx context.Context, w server.ResponseWriter
 	if _, err := w.Write(ctx, data); err != nil {
 		zap.L().Error("Failed to send error response", zap.Error(err))
 	}
+}
+
+func handleReadError(err error) error {
+	switch {
+	case err == nil: // Everything is ok, just read data
+	case errors.Is(err, os.ErrDeadlineExceeded): // No data received
+	case errors.Is(err, io.EOF):
+		zap.L().Info("Connection closed by client")
+		return io.EOF
+	default:
+		zap.L().Debug("Error reading data from connection", zap.Error(err))
+		return pkgerr.Wrap(err, "client service failed to read data from the connection")
+	}
+
+	return nil
+}
+
+func handleWriteError(err error) error {
+	switch {
+	case err == nil:
+	case errors.Is(err, io.EOF):
+		zap.L().Info("Connection closed by client")
+		return io.EOF
+	default:
+		return pkgerr.Wrap(err, "client service failed to send challenge request to client")
+	}
+
+	return nil
 }
