@@ -14,14 +14,16 @@ import (
 
 //go:generate mockgen -source=$GOFILE -destination=mock/accept_test_mock.go
 
-// Just hack to generate appropriate mock
+//nolint:unused // Just hack to generate appropriate mock.
 type conn interface {
 	net.Conn
 }
 
-var errConnectionErr = errors.New("connect error")
+var errConnection = errors.New("connect error")
 
 func TestHandleClient_OnConnectError(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -33,14 +35,14 @@ func TestHandleClient_OnConnectError(t *testing.T) {
 
 	timeout := time.Second
 
-	mockService.EXPECT().OnConnect(ctx, gomock.Any()).Return(errConnectionErr)
+	mockService.EXPECT().OnConnect(ctx, gomock.Any()).Return(errConnection)
 
 	handleClient(ctx, mockConn, timeout, mockService)
-
-	// Check no other logic is called
 }
 
 func TestHandleClient_OnDataEOF(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -58,11 +60,11 @@ func TestHandleClient_OnDataEOF(t *testing.T) {
 	mockService.EXPECT().OnDisconnect(ctx)
 
 	handleClient(ctx, mockConn, timeout, mockService)
-
-	// Check onData returned io.EOF and no other logic is called
 }
 
 func TestHandleClient_OnDataError(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -80,11 +82,11 @@ func TestHandleClient_OnDataError(t *testing.T) {
 	mockService.EXPECT().OnDisconnect(ctx)
 
 	handleClient(ctx, mockConn, timeout, mockService)
-
-	// Check onData returned error and no other logic is called
 }
 
 func TestHandleClient_ContextDone(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
