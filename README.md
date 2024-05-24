@@ -41,9 +41,9 @@ Check the [documentation](https://golangci-lint.run/welcome/install/#local-insta
 
 ### Server
 Server expects the following environment variables:
-      * **LOG_LEVEL** - Logging level (*error*, *warning*, *info*, *debug*), default is *info*
-      * **HOST** - host to listen on
-      * **PORT** - TCP port to listen
+  - **LOG_LEVEL** - Logging level (*error*, *warning*, *info*, *debug*), default is *info*
+  - **HOST** - host to listen on
+  - **PORT** - TCP port to listen
 
 Configuration file is located at `conf/server.yaml`.
 
