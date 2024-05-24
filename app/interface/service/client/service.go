@@ -19,6 +19,8 @@ const (
 	maxDifficulty = 32
 )
 
+var StopSignal = io.EOF
+
 //go:generate mockgen -source=$GOFILE -destination=mock/$GOFILE
 type DDoSGuard interface {
 	IncRate(ctx context.Context) (int64, error)
@@ -126,7 +128,7 @@ func (s *Service) OnData(ctx context.Context, r serverTypes.ResponseReader, w se
 
 		s.sendErrorResponse(ctx, w, "Bad challenge resolution")
 
-		return io.EOF
+		return StopSignal
 	}
 
 	quote, err := s.logic.GetQuote(ctx)
@@ -149,7 +151,7 @@ func (s *Service) OnData(ctx context.Context, r serverTypes.ResponseReader, w se
 		return hErr
 	}
 
-	return io.EOF
+	return StopSignal
 }
 
 func (s *Service) OnDisconnect(ctx context.Context) {
@@ -199,7 +201,7 @@ func handleReadError(err error) error {
 	case errors.Is(err, os.ErrDeadlineExceeded): // No data received
 	case errors.Is(err, io.EOF):
 		zap.L().Info("Connection closed by client")
-		return io.EOF
+		return StopSignal
 	default:
 		zap.L().Debug("Error reading data from connection", zap.Error(err))
 		return pkgerr.Wrap(err, "client service failed to read data from the connection")
@@ -213,7 +215,7 @@ func handleWriteError(err error) error {
 	case err == nil:
 	case errors.Is(err, io.EOF):
 		zap.L().Info("Connection closed by client")
-		return io.EOF
+		return StopSignal
 	default:
 		return pkgerr.Wrap(err, "client service failed to send challenge request to client")
 	}
