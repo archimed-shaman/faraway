@@ -50,8 +50,15 @@ However, the logging approach heavily depends on the service, the number of micr
 
 This command builds everything you need and runs server and 10 clients:
 ```sh
-docker-compose build & docker-compose up
+docker-compose build && docker-compose up
 ```
+
+Logs:
+```
+docker-compose logs server
+docker-compose logs client
+```
+
 
 ### Dev & Build
 
