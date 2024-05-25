@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/archimed-shaman/faraway/compare/v1.0.0...v1.1.0) (2024-05-25)
+
+
+### Features
+
+* TCP synchronous client ([#3](https://github.com/archimed-shaman/faraway/issues/3)) ([4b6b5b1](https://github.com/archimed-shaman/faraway/commit/4b6b5b1029dbabab9a66338d9766dbd5efe751a6))
+
 # 1.0.0 (2024-05-24)
 
 
