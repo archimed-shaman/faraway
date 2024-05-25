@@ -61,6 +61,8 @@ func main() {
 	signal.Notify(signals, syscall.SIGINT)
 	signal.Notify(signals, syscall.SIGTERM)
 
+	cfg := config.Get()
+
 	for {
 		select {
 		case sig := <-signals:
@@ -68,22 +70,19 @@ func main() {
 			return
 
 		default:
-			run()
+			run(cfg)
 		}
 	}
 }
 
-func run() {
+func run(cfg *config.Config) {
 	defer func() { _ = zap.L().Sync() }()
-
-	cfg := config.Get()
 
 	codec := jsonC.NewCodec()
 
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", cfg.Net.Host, cfg.Net.Port))
 	if err != nil {
-		zap.L().Error("Failed to connect to server", zap.Error(err))
-		return
+		zap.L().Fatal("Failed to connect to server", zap.Error(err))
 	}
 
 	defer conn.Close()
