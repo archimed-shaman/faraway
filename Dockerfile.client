@@ -1,0 +1,41 @@
+FROM golang:1.22-alpine as builder
+
+LABEL maintainer="Alexander Morozov <archimed.shaman@gmail.com>"
+
+RUN apk update
+RUN apk upgrade
+RUN apk add -U --no-cache ca-certificates
+RUN apk add -U git tzdata upx 
+
+ENV SRC_DIR=/build/
+
+WORKDIR $SRC_DIR
+
+COPY go.* ./
+RUN go mod download
+
+COPY . $SRC_DIR
+
+RUN go test ./...
+RUN VERSION=$(cat VERSION | head -n1 | cut -d ';' -f1); \
+    GIT_BRANCH=$(git branch | grep \* | cut -d ' ' -f2); \
+    GIT_HASH=$(git rev-parse --short HEAD); \
+    GIT_DIRTY=$(if git diff --quiet; then echo false; else echo true; fi;); \
+    BUILD_DATE=$(date +%Y.%m.%d_%H:%M:%S); \
+    go build -ldflags "-s -w \
+    -X faraway/wow/app/infrastructure/version.versionExt=$VERSION \
+    -X faraway/wow/app/infrastructure/version.gitBranch=${GIT_BRANCH} \
+    -X faraway/wow/app/infrastructure/version.gitHash=${GIT_HASH} \
+    -X faraway/wow/app/infrastructure/version.gitDirty=${GIT_DIRTY} \
+    -X faraway/wow/app/infrastructure/version.buildDateExt=${BUILD_DATE}" \
+    -o /bin/faraway-wow-client -a ./cmd/client
+RUN upx --best --lzma /bin/faraway-wow-client
+
+FROM scratch
+COPY --from=builder /bin/faraway-wow-client /bin/faraway-wow-client
+COPY --from=builder /lib /lib
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY conf/ /etc/faraway/wow/conf/
+
+ENTRYPOINT ["/bin/faraway-wow-client"]

@@ -20,13 +20,15 @@ import (
 )
 
 func init() {
+	const serviceName = "server"
+
 	configPath := os.Getenv("CONFIG")
 	if configPath == "" {
 		configPath = "/etc/faraway/wow/conf/server.yaml"
 	}
 
 	// Create temporary logger for initial loging
-	logger := zap.Must(zap.NewProduction())
+	logger := zap.Must(zap.NewProduction(zap.Fields(zap.String("service", serviceName))))
 
 	cfg := config.NewConfig(configPath, logger)
 
@@ -40,7 +42,9 @@ func init() {
 		logger.Warn("Failed to parse logging level, falling back to Info level", zap.Error(err))
 	}
 
-	zap.ReplaceGlobals(zap.Must(zap.NewProduction(zap.IncreaseLevel(level))))
+	logCfg := zap.NewProductionConfig()
+	logCfg.Level.SetLevel(level)
+	zap.ReplaceGlobals(zap.Must(logCfg.Build(zap.Fields(zap.String("service", serviceName)))))
 
 	_ = logger.Sync()
 }

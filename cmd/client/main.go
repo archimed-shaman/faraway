@@ -1,19 +1,21 @@
 package main
 
 import (
+	"faraway/wow/app/infrastructure/config"
 	jsonC "faraway/wow/app/interface/service/codec/json"
 	"faraway/wow/pkg/pow"
 	"faraway/wow/pkg/protocol"
+	"fmt"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	pkgerr "github.com/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
-
-const BuffSize = 1024
 
 type Encoder interface {
 	Marshal(v any) ([]byte, error)
@@ -28,66 +30,109 @@ type Codec interface {
 	Decoder
 }
 
-func main() {
-	logLevel := os.Getenv("LOG_LEVEL")
+func init() {
+	const serviceName = "client"
 
-	level, err := zapcore.ParseLevel(logLevel)
+	configPath := os.Getenv("CONFIG")
+	if configPath == "" {
+		configPath = "/etc/faraway/wow/conf/client.yaml"
+	}
+
+	// Create temporary logger for initial loging
+	logger := zap.Must(zap.NewProduction(zap.Fields(zap.String("service", serviceName))))
+
+	cfg := config.NewConfig(configPath, logger)
+
+	level, err := zapcore.ParseLevel(cfg.Log.Level)
 	if err != nil {
-		// TODO: warning
+		// TODO: wraning
 		level = zap.InfoLevel
 	}
 
-	logger := zap.Must(zap.NewProduction(zap.IncreaseLevel(level)))
+	logCfg := zap.NewProductionConfig()
+	logCfg.Level.SetLevel(level)
+	zap.ReplaceGlobals(zap.Must(logCfg.Build(zap.Fields(zap.String("service", serviceName)))))
 
-	zap.ReplaceGlobals(logger)
+	_ = logger.Sync()
+}
 
-	defer func() { _ = logger.Sync() }()
+func main() {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT)
+	signal.Notify(signals, syscall.SIGTERM)
+
+	for {
+		select {
+		case sig := <-signals:
+			zap.L().Info("Client interrupted", zap.String("signal", sig.String()))
+			return
+
+		default:
+			run()
+		}
+	}
+}
+
+func run() {
+	defer zap.L().Sync()
+
+	cfg := config.Get()
 
 	codec := jsonC.NewCodec()
 
-	conn, err := net.Dial("tcp", "127.0.0.1:9090")
+	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", cfg.Net.Host, cfg.Net.Port))
 	if err != nil {
-		logger.Fatal("Failed to connect to server", zap.Error(err))
+		zap.L().Error("Failed to connect to server", zap.Error(err))
+		return
 	}
 
 	defer conn.Close()
 
-	logger.Info("Connected to server")
+	zap.L().Info("Connected to server")
 
 	// Read initial challenge request
-	challengeReq, err := readData[protocol.ChallengeReq](conn, codec)
+	challengeReq, err := readData[protocol.ChallengeReq](conn, codec,
+		time.Duration(cfg.Net.Timeout), cfg.Net.BuffSize)
 	if err != nil {
-		logger.Fatal("Failed to connect to server", zap.Error(err))
+		zap.L().Error("Failed to read data from server", zap.Error(err))
+		return
 	}
+
+	start := time.Now()
 
 	solution, err := pow.Resolve(challengeReq.Challenge, challengeReq.Difficulty)
 	if err != nil {
-		logger.Fatal("Failed to find solution for challenge", zap.Error(err))
+		zap.L().Fatal("Failed to find solution for challenge", zap.Error(err))
 	}
 
-	if err = writeData(conn, codec, &protocol.ChallengeResp{
+	zap.L().Info("Challenge solution found",
+		zap.Int("difficulty", challengeReq.Difficulty), zap.Duration("elapsed", time.Since(start)))
+
+	if err = writeData(conn, codec, time.Duration(cfg.Net.Timeout), &protocol.ChallengeResp{
 		Challenge:  challengeReq.Challenge,
 		Difficulty: challengeReq.Difficulty,
 		Solution:   solution,
 	}); err != nil {
-		logger.Fatal("Failed to send challenge response", zap.Error(err))
+		zap.L().Error("Failed to send challenge response", zap.Error(err))
+		return
 	}
 
 	// Read initial challenge request
-	data, err := readData[protocol.Data](conn, codec)
+	data, err := readData[protocol.Data](conn, codec, time.Duration(cfg.Net.Timeout), cfg.Net.BuffSize)
 	if err != nil {
-		logger.Fatal("Failed to get data from server", zap.Error(err))
+		zap.L().Error("Failed to get data from server", zap.Error(err))
+		return
 	}
 
-	logger.Info("Quote received", zap.String("quote", string(data.Payload)))
+	zap.L().Info("Quote received", zap.String("quote", string(data.Payload)))
 
-	logger.Info("Client shutting down")
+	zap.L().Info("Client shutting down")
 }
 
-func readData[A any](conn net.Conn, codec Codec) (*A, error) {
-	buffer := make([]byte, BuffSize)
+func readData[A any](conn net.Conn, codec Codec, timeout time.Duration, buffSize int) (*A, error) {
+	buffer := make([]byte, buffSize)
 
-	if err := conn.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+	if err := conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
 		return nil, pkgerr.Wrap(err, "failed to set read timeout")
 	}
 
@@ -105,13 +150,13 @@ func readData[A any](conn net.Conn, codec Codec) (*A, error) {
 	return &inst, nil
 }
 
-func writeData[A any](conn net.Conn, codec Codec, obj *A) error {
+func writeData[A any](conn net.Conn, codec Codec, timeout time.Duration, obj *A) error {
 	byteObj, err := codec.Marshal(obj)
 	if err != nil {
 		return pkgerr.Wrap(err, "failed to marshal data")
 	}
 
-	if err := conn.SetWriteDeadline(time.Now().Add(time.Second)); err != nil {
+	if err := conn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
 		return pkgerr.Wrap(err, "failed to set write timeout")
 	}
 
