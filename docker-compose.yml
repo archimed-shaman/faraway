@@ -1,0 +1,32 @@
+---
+
+services:
+  server:
+    image: server
+    hostname: server
+    build:
+      dockerfile: Dockerfile.server
+    environment:
+      - CONFIG=/etc/faraway/wow/conf/server.yaml
+      - LOG_LEVEL=info
+      - HOST=0.0.0.0
+      - PORT=9090
+    ports:
+      - 9090:9090
+    restart: no
+
+  client:
+    image: client
+    build:
+      dockerfile: Dockerfile.client
+    deploy:
+      mode: replicated
+      replicas: 10
+    environment:
+      - CONFIG=/etc/faraway/wow/conf/client.yaml
+      - LOG_LEVEL=info
+      - HOST=server
+      - PORT=9090
+    restart: on-failure
+    depends_on:
+      - server
