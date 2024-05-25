@@ -74,7 +74,7 @@ func main() {
 }
 
 func run() {
-	defer zap.L().Sync()
+	defer func() { _ = zap.L().Sync() }()
 
 	cfg := config.Get()
 
