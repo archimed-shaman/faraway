@@ -57,7 +57,7 @@ docker run -p 9090:9090 faraway-wow-server
 
 ## Network protocol
 
-In this case, JSON is chosen for simplicity in the test project. However, it is not very suitable for real production usage with a TCP server because it is not optimal in size, not the fastest in terms of marshalling, and additionally, it does not provide information about message length, which is crucial in network data transmission.
+In this case, JSON is chosen for simplicity in the test project. However, it is not very suitable for real production usage with a TCP server because it is not optimal in size, not the fastest in terms of marshalling, dispatching, and additionally, it does not provide information about message length, which is crucial in network data transmission.
 
 For a real production scenario, something like protobuf, [msgpack](https://msgpack.org), or a custom binary Tag-Length-Value protocol would be more appropriate. The choice should depend on the planned client-server interaction, client specificity (for example, mobile clients might require traffic minimization), the project's ecosystem, and available diagnostic tools (it might be necessary, for example, to implement a plugin for Wireshark).
 

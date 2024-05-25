@@ -7,6 +7,7 @@ import (
 	"faraway/wow/pkg/pow"
 	"faraway/wow/pkg/protocol"
 	"io"
+	"math"
 	"os"
 
 	pkgerr "github.com/pkg/errors"
@@ -14,9 +15,8 @@ import (
 )
 
 const (
-	unknownRate   = -1
-	challengeLen  = 32
-	maxDifficulty = 32
+	unknownRate  = -1
+	challengeLen = 32
 )
 
 var StopSignal = io.EOF
@@ -45,20 +45,27 @@ type UserLogic interface {
 }
 
 type Service struct {
-	buff       []byte
-	challenge  []byte
-	difficulty int
+	buff                 []byte
+	challenge            []byte
+	difficulty           int
+	maxDifficulty        int
+	rateDifficultyFactor float64
 
 	codec Codec
 	ddos  DDoSGuard
 	logic UserLogic
 }
 
-func NewService(buffSize int, logic UserLogic, codec Codec, ddos DDoSGuard) *Service {
+func NewService(
+	maxDifficulty int, rateDifficultyFactor float64, buffSize int,
+	logic UserLogic, codec Codec, ddos DDoSGuard,
+) *Service {
 	return &Service{
-		buff:       make([]byte, buffSize),
-		challenge:  nil,
-		difficulty: maxDifficulty,
+		buff:                 make([]byte, buffSize),
+		challenge:            nil,
+		difficulty:           0,
+		maxDifficulty:        maxDifficulty,
+		rateDifficultyFactor: rateDifficultyFactor,
 
 		codec: codec,
 		ddos:  ddos,
@@ -164,9 +171,9 @@ func (s *Service) OnDisconnect(ctx context.Context) {
 }
 
 func (s *Service) mkChallengeReq(rate int64) (*protocol.ChallengeReq, error) {
-	difficulty := int(rate)
-	if rate > maxDifficulty || rate <= 0 {
-		difficulty = maxDifficulty
+	difficulty := int(math.Floor(float64(rate) * s.rateDifficultyFactor))
+	if rate > int64(s.maxDifficulty) || rate <= 0 {
+		difficulty = s.maxDifficulty
 	}
 
 	challenge, err := pow.GenChallenge(challengeLen, difficulty)

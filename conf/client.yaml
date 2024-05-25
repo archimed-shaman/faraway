@@ -1,0 +1,10 @@
+---
+
+log:
+  level: info
+
+net:
+  host: localhost
+  port: 9090
+  buff_size: 1024
+  timeout: 1s

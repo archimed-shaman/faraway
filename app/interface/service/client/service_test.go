@@ -16,7 +16,11 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-const buffSize = 1024
+const (
+	buffSize             = 1024
+	maxDifficulty        = 5
+	rateDifficultyFactor = 1
+)
 
 var errTestAssertionFailed = errors.New("type assertion failed")
 
@@ -35,15 +39,15 @@ func TestService_OnConnect(t *testing.T) {
 
 	var challenge []byte
 
-	difficulty := 5
+	rate := 4
 
-	mockDDoSGuard.EXPECT().IncRate(gomock.Any()).Return(int64(difficulty), nil)
+	mockDDoSGuard.EXPECT().IncRate(gomock.Any()).Return(int64(rate), nil)
 
 	mockCodec.EXPECT().Marshal(gomock.Any()).
 		DoAndReturn(func(v any) ([]byte, error) {
 			req, ok := v.(*protocol.ChallengeReq)
 			if !ok {
-				t.Errorf("Bad type: %s", reflect.TypeOf(v))
+				t.Errorf("Bad type: %s (%+v)", reflect.TypeOf(v), v)
 				return nil, errTestAssertionFailed
 			}
 
@@ -53,13 +57,13 @@ func TestService_OnConnect(t *testing.T) {
 		})
 	mockWriter.EXPECT().Write(gomock.Any(), mockedChallenge).Return(len(mockedChallenge), nil)
 
-	s := NewService(buffSize, mockLogic, mockCodec, mockDDoSGuard)
+	s := NewService(maxDifficulty, rateDifficultyFactor, buffSize, mockLogic, mockCodec, mockDDoSGuard)
 
 	err := s.OnConnect(context.Background(), mockWriter)
 
 	test.Nil(t, "OnConnect error", err)
 	test.Check(t, "OnConnect challenge", challenge, s.challenge)
-	test.Check(t, "OnConnect difficulty", difficulty, s.difficulty)
+	test.Check(t, "OnConnect difficulty", rate*rateDifficultyFactor, s.difficulty)
 }
 
 // TODO: add more tests to check errors from different interfaces
@@ -77,7 +81,7 @@ func TestService_OnData(t *testing.T) {
 	mockWriter := mockServer.NewMockResponseWriter(ctrl)
 
 	// Precalculated challenge and solution
-	difficulty := 4
+	rate := 4
 	challenge := []byte{
 		142, 235, 122, 84, 235, 172, 46, 185, 5, 54, 158, 113, 220, 139, 151, 91,
 		200, 37, 143, 77, 64, 125, 13, 129, 124, 100, 58, 7, 97, 180, 245, 3,
@@ -87,7 +91,7 @@ func TestService_OnData(t *testing.T) {
 	challengeResp := protocol.ChallengeResp{
 		Challenge:  challenge,
 		Solution:   solution,
-		Difficulty: difficulty,
+		Difficulty: rate,
 	}
 
 	challengeRespBytes, err := json.Marshal(&challengeResp)
@@ -98,7 +102,7 @@ func TestService_OnData(t *testing.T) {
 		DoAndReturn(func(data []byte, v any) error {
 			resp, ok := v.(*protocol.ChallengeResp)
 			if !ok {
-				t.Errorf("Bad type: %s", reflect.TypeOf(v))
+				t.Errorf("Bad type: %s (%+v)", reflect.TypeOf(v), v)
 				return errTestAssertionFailed
 			}
 
@@ -120,7 +124,7 @@ func TestService_OnData(t *testing.T) {
 		DoAndReturn(func(v any) ([]byte, error) {
 			req, ok := v.(*protocol.Data)
 			if !ok {
-				t.Errorf("Bad type: %s", reflect.TypeOf(v))
+				t.Errorf("Bad type: %s (%+v)", reflect.TypeOf(v), v)
 				return nil, errTestAssertionFailed
 			}
 
@@ -131,9 +135,9 @@ func TestService_OnData(t *testing.T) {
 
 	mockWriter.EXPECT().Write(gomock.Any(), mockedData).Return(len(mockedData), nil)
 
-	s := NewService(buffSize, mockLogic, mockCodec, mockDDoSGuard)
+	s := NewService(maxDifficulty, rateDifficultyFactor, buffSize, mockLogic, mockCodec, mockDDoSGuard)
 	s.challenge = challenge
-	s.difficulty = difficulty
+	s.difficulty = rate
 
 	err = s.OnData(context.Background(), mockReader, mockWriter)
 	test.Err(t, "OnData error", io.EOF, err)
@@ -151,7 +155,7 @@ func TestService_OnDisconnect(t *testing.T) {
 
 	mockDDoSGuard.EXPECT().DecRate(gomock.Any()).Return(int64(5), nil).Times(1)
 
-	s := NewService(1024, mockLogic, mockCodec, mockDDoSGuard)
+	s := NewService(maxDifficulty, rateDifficultyFactor, buffSize, mockLogic, mockCodec, mockDDoSGuard)
 	s.challenge = []byte("challenge")
 	s.difficulty = 5
 
