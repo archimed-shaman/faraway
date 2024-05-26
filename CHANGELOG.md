@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/archimed-shaman/faraway/compare/v1.2.0...v1.2.1) (2024-05-26)
+
+
+### Bug Fixes
+
+* Code tuning and improvements ([#6](https://github.com/archimed-shaman/faraway/issues/6)) ([9e5f304](https://github.com/archimed-shaman/faraway/commit/9e5f30463d1d49dbe35c417e148950b068d7e6b1))
+
 # [1.2.0](https://github.com/archimed-shaman/faraway/compare/v1.1.1...v1.2.0) (2024-05-26)
 
 
