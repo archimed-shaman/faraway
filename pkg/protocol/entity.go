@@ -1,20 +1,29 @@
 package protocol
 
-type ChallengeReq struct {
-	Challenge  []byte `json:"challenge"`
+import "encoding/json"
+
+type NonceReq struct{}
+
+type NonceResp struct {
+	Nonce      []byte `json:"nonce"`
 	Difficulty int    `json:"difficulty"`
 }
 
-type ChallengeResp struct {
-	Challenge  []byte `json:"challenge"`
+type DataReq struct {
+	Nonce      []byte `json:"nonce"`
 	Difficulty int    `json:"difficulty"`
-	Solution   []byte `json:"solution"`
+	CNonce     []byte `json:"cnonce"`
+}
+
+type DataResp struct {
+	Payload []byte `json:"payload"`
 }
 
 type ErrorResp struct {
 	Reason string `json:"reason"`
 }
 
-type Data struct {
-	Payload []byte `json:"payload"`
+type Package struct {
+	Tag     string          `json:"tag"`
+	Payload json.RawMessage `json:"payload"`
 }

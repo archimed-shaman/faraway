@@ -3,8 +3,8 @@ package server
 import (
 	"context"
 	"errors"
-	"faraway/wow/app/infrastructure/server/types"
 	"fmt"
+	"io"
 	"net"
 	"reflect"
 	"runtime"
@@ -19,14 +19,8 @@ import (
 //go:generate mockgen -source=$GOFILE -destination=mock/$GOFILE
 
 type Service interface {
-	// io.EOF is expected as the signal of end of processing.
-	OnConnect(ctx context.Context, w types.ResponseWriter) error
-
 	// Connection will be served until err is nil.
-	// io.EOF is expected as the signal of end of processing.
-	OnData(ctx context.Context, r types.ResponseReader, w types.ResponseWriter) error
-
-	OnDisconnect(ctx context.Context)
+	Handle(ctx context.Context, r io.Reader, w io.Writer) error
 }
 
 type Server struct {
@@ -37,7 +31,7 @@ type Server struct {
 	wg             sync.WaitGroup
 }
 
-func New(buffSize int, maxConnections int32, timeout time.Duration, allocService func() Service) *Server {
+func New(maxConnections int32, timeout time.Duration, allocService func() Service) *Server {
 	return &Server{
 		maxConnections: maxConnections,
 		servicePool:    sync.Pool{New: func() any { return allocService() }},

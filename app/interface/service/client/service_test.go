@@ -1,74 +1,72 @@
+//nolint:errchkjson // To avoid test code in common space
 package client
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	mockServer "faraway/wow/app/infrastructure/server/types/mock"
-	mock "faraway/wow/app/interface/service/client/mock"
 	"faraway/wow/pkg/protocol"
 	"faraway/wow/pkg/test"
-	"io"
-	"reflect"
 	"testing"
+
+	mock "faraway/wow/app/interface/service/client/mock"
 
 	"go.uber.org/mock/gomock"
 )
 
-const (
-	buffSize             = 1024
-	maxDifficulty        = 5
-	rateDifficultyFactor = 1
-)
-
-var errTestAssertionFailed = errors.New("type assertion failed")
-
-func TestService_OnConnect(t *testing.T) {
+func TestService_onNonceReq_Success(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockedChallenge := []byte("mocked")
-
 	mockCodec := mock.NewMockCodec(ctrl)
 	mockDDoSGuard := mock.NewMockDDoSGuard(ctrl)
-	mockLogic := mock.NewMockUserLogic(ctrl)
-	mockWriter := mockServer.NewMockResponseWriter(ctrl)
+	mockUserLogic := mock.NewMockUserLogic(ctrl)
 
-	var challenge []byte
+	rate := 3
+	factor := 2.0
+	maxDifficulty := 10
 
-	rate := 4
+	svc := NewService(1024, maxDifficulty, factor, mockCodec, mockUserLogic, mockDDoSGuard)
+
+	ctx := context.Background()
+	writer := &bytes.Buffer{}
 
 	mockDDoSGuard.EXPECT().IncRate(gomock.Any()).Return(int64(rate), nil)
 
-	mockCodec.EXPECT().Marshal(gomock.Any()).
-		DoAndReturn(func(v any) ([]byte, error) {
-			req, ok := v.(*protocol.ChallengeReq)
-			if !ok {
-				t.Errorf("Bad type: %s (%+v)", reflect.TypeOf(v), v)
-				return nil, errTestAssertionFailed
-			}
+	nonceResp := &protocol.NonceResp{
+		Nonce:      []byte("test_nonce"),
+		Difficulty: rate * int(factor),
+	}
 
-			challenge = req.Challenge
+	payloadBytes, _ := json.Marshal(nonceResp)
 
-			return mockedChallenge, nil
-		})
-	mockWriter.EXPECT().Write(gomock.Any(), mockedChallenge).Return(len(mockedChallenge), nil)
+	packageNonceResp := &protocol.Package{
+		Tag:     "NonceResp",
+		Payload: payloadBytes,
+	}
 
-	s := NewService(maxDifficulty, rateDifficultyFactor, buffSize, mockLogic, mockCodec, mockDDoSGuard)
+	packageBytes, _ := json.Marshal(packageNonceResp)
 
-	err := s.OnConnect(context.Background(), mockWriter)
+	mockCodec.EXPECT().Marshal(gomock.AssignableToTypeOf(nonceResp)).Return(payloadBytes, nil)
+	mockCodec.EXPECT().Marshal(gomock.AssignableToTypeOf(packageNonceResp)).Return(packageBytes, nil)
 
-	test.Nil(t, "OnConnect error", err)
-	test.Check(t, "OnConnect challenge", challenge, s.challenge)
-	test.Check(t, "OnConnect difficulty", rate*rateDifficultyFactor, s.difficulty)
+	err := svc.onNonceReq(ctx, &protocol.NonceReq{}, writer)
+	test.Nil(t, "onNonceReq error", err)
+
+	var pkg protocol.Package
+	err = json.Unmarshal(writer.Bytes(), &pkg)
+	test.Nil(t, "Unmarshal package error", err)
+
+	var returnedNonceResp protocol.NonceResp
+	err = json.Unmarshal(pkg.Payload, &returnedNonceResp)
+
+	test.Nil(t, "Unmarshal NonceResp error", err)
+	test.Check(t, "NonceResp", *nonceResp, returnedNonceResp)
 }
 
-// TODO: add more tests to check errors from different interfaces
-
-func TestService_OnData(t *testing.T) {
+func TestService_onDataReq_Success(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
@@ -76,74 +74,49 @@ func TestService_OnData(t *testing.T) {
 
 	mockCodec := mock.NewMockCodec(ctrl)
 	mockDDoSGuard := mock.NewMockDDoSGuard(ctrl)
-	mockLogic := mock.NewMockUserLogic(ctrl)
-	mockReader := mockServer.NewMockResponseReader(ctrl)
-	mockWriter := mockServer.NewMockResponseWriter(ctrl)
+	mockUserLogic := mock.NewMockUserLogic(ctrl)
 
-	// Precalculated challenge and solution
-	rate := 4
-	challenge := []byte{
-		142, 235, 122, 84, 235, 172, 46, 185, 5, 54, 158, 113, 220, 139, 151, 91,
-		200, 37, 143, 77, 64, 125, 13, 129, 124, 100, 58, 7, 97, 180, 245, 3,
-	}
-	solution := []byte{20}
+	svc := NewService(1024, 10, 1.0, mockCodec, mockUserLogic, mockDDoSGuard)
 
-	challengeResp := protocol.ChallengeResp{
-		Challenge:  challenge,
-		Solution:   solution,
-		Difficulty: rate,
+	ctx := context.Background()
+	writer := &bytes.Buffer{}
+
+	svc.challenge = []byte("challenge")
+	svc.difficulty = 1
+
+	mockUserLogic.EXPECT().GetQuote(gomock.Any()).Return("test quote", nil)
+
+	dataResp := &protocol.DataResp{
+		Payload: []byte("test quote"),
 	}
 
-	challengeRespBytes, err := json.Marshal(&challengeResp)
-	test.Nil(t, "Marshal error", err)
+	payloadBytes, _ := json.Marshal(dataResp)
 
-	mockReader.EXPECT().Data().Return(io.NopCloser(bytes.NewReader(challengeRespBytes)))
-	mockCodec.EXPECT().Unmarshal(challengeRespBytes, gomock.Any()).
-		DoAndReturn(func(data []byte, v any) error {
-			resp, ok := v.(*protocol.ChallengeResp)
-			if !ok {
-				t.Errorf("Bad type: %s (%+v)", reflect.TypeOf(v), v)
-				return errTestAssertionFailed
-			}
-
-			*resp = challengeResp
-
-			return nil
-		})
-
-	quote := "Word of Wisdom quote"
-
-	mockLogic.EXPECT().GetQuote(gomock.Any()).Return(quote, nil)
-
-	data := protocol.Data{
-		Payload: []byte(quote),
+	packageDataResp := &protocol.Package{
+		Tag:     "DataResp",
+		Payload: payloadBytes,
 	}
-	mockedData := []byte("mocked data")
 
-	mockCodec.EXPECT().Marshal(gomock.Any()).
-		DoAndReturn(func(v any) ([]byte, error) {
-			req, ok := v.(*protocol.Data)
-			if !ok {
-				t.Errorf("Bad type: %s (%+v)", reflect.TypeOf(v), v)
-				return nil, errTestAssertionFailed
-			}
+	packageBytes, _ := json.Marshal(packageDataResp)
 
-			test.Check(t, "returned data", data, *req)
+	mockCodec.EXPECT().Marshal(gomock.AssignableToTypeOf(dataResp)).Return(payloadBytes, nil)
+	mockCodec.EXPECT().Marshal(gomock.AssignableToTypeOf(packageDataResp)).Return(packageBytes, nil)
 
-			return mockedData, nil
-		})
+	err := svc.onDataReq(ctx, &protocol.DataReq{CNonce: []byte("solution")}, writer)
+	test.Nil(t, "onDataReq error", err)
 
-	mockWriter.EXPECT().Write(gomock.Any(), mockedData).Return(len(mockedData), nil)
+	var pkg protocol.Package
+	err = json.Unmarshal(writer.Bytes(), &pkg)
+	test.Nil(t, "Unmarshal package error", err)
 
-	s := NewService(maxDifficulty, rateDifficultyFactor, buffSize, mockLogic, mockCodec, mockDDoSGuard)
-	s.challenge = challenge
-	s.difficulty = rate
+	var returnedDataResp protocol.DataResp
+	err = json.Unmarshal(pkg.Payload, &returnedDataResp)
 
-	err = s.OnData(context.Background(), mockReader, mockWriter)
-	test.Err(t, "OnData error", io.EOF, err)
+	test.Nil(t, "Unmarshal DataResp error", err)
+	test.Check(t, "DataResp", *dataResp, returnedDataResp)
 }
 
-func TestService_OnDisconnect(t *testing.T) {
+func TestService_onDataReq_BadSolution(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
@@ -151,16 +124,42 @@ func TestService_OnDisconnect(t *testing.T) {
 
 	mockCodec := mock.NewMockCodec(ctrl)
 	mockDDoSGuard := mock.NewMockDDoSGuard(ctrl)
-	mockLogic := mock.NewMockUserLogic(ctrl)
+	mockUserLogic := mock.NewMockUserLogic(ctrl)
 
-	mockDDoSGuard.EXPECT().DecRate(gomock.Any()).Return(int64(5), nil).Times(1)
+	svc := NewService(1024, 10, 1.0, mockCodec, mockUserLogic, mockDDoSGuard)
 
-	s := NewService(maxDifficulty, rateDifficultyFactor, buffSize, mockLogic, mockCodec, mockDDoSGuard)
-	s.challenge = []byte("challenge")
-	s.difficulty = 5
+	ctx := context.Background()
+	writer := &bytes.Buffer{}
 
-	s.OnDisconnect(context.Background())
+	svc.challenge = []byte("challenge")
+	svc.difficulty = 1
 
-	test.Check(t, "OnDisconnect challenge", []uint8(nil), s.challenge)
-	test.Check(t, "OnDisconnect difficulty", 0, s.difficulty)
+	errorResp := &protocol.ErrorResp{
+		Reason: "Bad challenge solution",
+	}
+
+	payloadBytes, _ := json.Marshal(errorResp)
+
+	packageErrorResp := &protocol.Package{
+		Tag:     "ErrorResp",
+		Payload: payloadBytes,
+	}
+
+	packageBytes, _ := json.Marshal(packageErrorResp)
+
+	mockCodec.EXPECT().Marshal(gomock.AssignableToTypeOf(errorResp)).Return(payloadBytes, nil)
+	mockCodec.EXPECT().Marshal(gomock.AssignableToTypeOf(packageErrorResp)).Return(packageBytes, nil)
+
+	err := svc.onDataReq(ctx, &protocol.DataReq{CNonce: []byte("bad_solution")}, writer)
+	test.Nil(t, "onDataReq error", err)
+
+	var pkg protocol.Package
+	err = json.Unmarshal(writer.Bytes(), &pkg)
+	test.Nil(t, "Unmarshal package error", err)
+
+	var returnedErrorResp protocol.ErrorResp
+	err = json.Unmarshal(pkg.Payload, &returnedErrorResp)
+
+	test.Nil(t, "Unmarshal ErrorResp error", err)
+	test.Check(t, "ErrorResp", *errorResp, returnedErrorResp)
 }

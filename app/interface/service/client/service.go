@@ -2,13 +2,11 @@ package client
 
 import (
 	"context"
-	"errors"
-	serverTypes "faraway/wow/app/infrastructure/server/types"
+	"faraway/wow/app/interface/service/dispatcher"
 	"faraway/wow/pkg/pow"
 	"faraway/wow/pkg/protocol"
 	"io"
 	"math"
-	"os"
 
 	pkgerr "github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -19,25 +17,16 @@ const (
 	challengeLen = 32
 )
 
-var StopSignal = io.EOF
-
 //go:generate mockgen -source=$GOFILE -destination=mock/$GOFILE
-type DDoSGuard interface {
-	IncRate(ctx context.Context) (int64, error)
-	DecRate(ctx context.Context) (int64, error)
-}
 
-type Encoder interface {
+type Codec interface {
+	GetRaw(r io.Reader, buff []byte) (*protocol.Package, error)
+	Unmarshal(data []byte, v any) error
 	Marshal(v any) ([]byte, error)
 }
 
-type Decoder interface {
-	Unmarshal(data []byte, v interface{}) error
-}
-
-type Codec interface {
-	Encoder
-	Decoder
+type DDoSGuard interface {
+	IncRate(ctx context.Context) (int64, error)
 }
 
 type UserLogic interface {
@@ -45,35 +34,53 @@ type UserLogic interface {
 }
 
 type Service struct {
+	dispatcher           *dispatcher.Dispatcher
 	buff                 []byte
-	challenge            []byte
-	difficulty           int
 	maxDifficulty        int
 	rateDifficultyFactor float64
+	codec                Codec
+	ddos                 DDoSGuard
+	logic                UserLogic
 
-	codec Codec
-	ddos  DDoSGuard
-	logic UserLogic
+	// Client state
+	// FIXME: add outstanding state holder or make it stateless (like JWT)
+	challenge  []byte
+	difficulty int
 }
 
 func NewService(
-	maxDifficulty int, rateDifficultyFactor float64, buffSize int,
-	logic UserLogic, codec Codec, ddos DDoSGuard,
+	buffSize int, maxDifficulty int, rateDifficultyFactor float64,
+	codec Codec, logic UserLogic, ddos DDoSGuard,
 ) *Service {
-	return &Service{
+	service := &Service{
+		dispatcher:           dispatcher.New(codec),
 		buff:                 make([]byte, buffSize),
-		challenge:            nil,
-		difficulty:           0,
 		maxDifficulty:        maxDifficulty,
 		rateDifficultyFactor: rateDifficultyFactor,
-
-		codec: codec,
-		ddos:  ddos,
-		logic: logic,
+		codec:                codec,
+		ddos:                 ddos,
+		logic:                logic,
+		challenge:            nil,
+		difficulty:           0,
 	}
+
+	service.dispatcher.Register(
+		dispatcher.NewProcessor(service.onNonceReq),
+		dispatcher.NewProcessor(service.onDataReq),
+	)
+
+	return service
 }
 
-func (s *Service) OnConnect(ctx context.Context, w serverTypes.ResponseWriter) error {
+func (s *Service) Handle(ctx context.Context, r io.Reader, w io.Writer) error {
+	if err := s.dispatcher.Dispatch(ctx, r, w, s.buff); err != nil {
+		return pkgerr.Wrap(err, "client service failed to route data")
+	}
+
+	return nil
+}
+
+func (s *Service) onNonceReq(ctx context.Context, pkg *protocol.NonceReq, w io.Writer) error {
 	rate, err := s.ddos.IncRate(ctx)
 	if err != nil {
 		zap.L().Error("Failed to increase current rate", zap.Error(err))
@@ -81,98 +88,73 @@ func (s *Service) OnConnect(ctx context.Context, w serverTypes.ResponseWriter) e
 		rate = unknownRate
 	}
 
-	challengeReq, err := s.mkChallengeReq(rate)
+	nonceResp, err := s.mkNonceResp(rate)
 	if err != nil {
 		zap.L().Error("Failed to make challenge request", zap.Error(err))
-		s.sendErrorResponse(ctx, w, "Failed to make challenge request")
+
+		if sendErr := s.sendErrorResponse(w, "Failed to make challenge request"); sendErr != nil {
+			zap.L().Error("Failed to send error", zap.Error(err))
+		}
 
 		return err
 	}
 
-	s.challenge, s.difficulty = challengeReq.Challenge, challengeReq.Difficulty
+	s.challenge = nonceResp.Nonce
+	s.difficulty = nonceResp.Difficulty
 
-	byteReq, err := s.codec.Marshal(challengeReq)
+	bytes, err := dispatcher.EncodePackage(nonceResp, s.codec)
 	if err != nil {
-		return pkgerr.Wrap(err, "client service failed to marshal challenge request")
+		return pkgerr.Wrap(err, "client service failed to encode nonce response")
 	}
 
-	_, err = w.Write(ctx, byteReq)
-	if hErr := handleWriteError(err); hErr != nil {
-		return hErr
+	if _, err := w.Write(bytes); err != nil {
+		return pkgerr.Wrap(err, "client service failed respond nonce")
 	}
 
 	return nil
 }
 
-func (s *Service) OnData(ctx context.Context, r serverTypes.ResponseReader, w serverTypes.ResponseWriter) error {
-	n, err := r.Data().Read(s.buff)
-	if hErr := handleReadError(err); hErr != nil {
-		return hErr
-	}
-
-	// Assuming the buffer is enough to receive the response at once.
-	// For the production use here must be a check if any other data is expected.
-	var challengeResp protocol.ChallengeResp
-	if err = s.codec.Unmarshal(s.buff[:n], &challengeResp); err != nil {
-		zap.L().Debug("Failed to unmarshal quote", zap.Error(err))
-		s.sendErrorResponse(ctx, w, "Bad response")
-
-		return pkgerr.Wrap(err, "client service failed to unmarshal challenge response")
-	}
-
-	ok, err := pow.CheckSolution(s.challenge, challengeResp.Solution, s.difficulty)
+func (s *Service) onDataReq(ctx context.Context, pkg *protocol.DataReq, w io.Writer) error {
+	ok, err := pow.CheckSolution(s.challenge, pkg.CNonce, s.difficulty)
 	if err != nil {
-		s.sendErrorResponse(ctx, w, "Bad challenge resolution")
 		return pkgerr.Wrap(err, "client service failed to check challenge solution")
 	}
 
 	if !ok {
-		zap.L().Debug("Bad challenge, disconnection response",
+		zap.L().Debug("Bad challenge solution",
 			zap.ByteString("challenge", s.challenge),
-			zap.ByteString("solution", challengeResp.Solution),
+			zap.ByteString("solution", pkg.CNonce),
 			zap.Int("difficulty", s.difficulty),
 		)
 
-		s.sendErrorResponse(ctx, w, "Bad challenge resolution")
+		if sendErr := s.sendErrorResponse(w, "Bad challenge solution"); sendErr != nil {
+			zap.L().Error("Failed to send error", zap.Error(err))
+		}
 
-		return StopSignal
+		return nil
 	}
 
 	quote, err := s.logic.GetQuote(ctx)
 	if err != nil {
 		zap.L().Error("Failed to get quote from user logic", zap.Error(err))
-		s.sendErrorResponse(ctx, w, "Internal error")
-
 		return pkgerr.Wrap(err, "client service failed to get quote")
 	}
 
-	data, err := s.codec.Marshal(&protocol.Data{
-		Payload: []byte(quote),
-	})
+	bytes, err := dispatcher.EncodePackage(&protocol.DataResp{Payload: []byte(quote)}, s.codec)
 	if err != nil {
-		return pkgerr.Wrap(err, "client service failed to marshal data")
+		return pkgerr.Wrap(err, "client service failed to encode data response")
 	}
 
-	_, err = w.Write(ctx, data)
-	if hErr := handleWriteError(err); hErr != nil {
-		return hErr
+	if _, err := w.Write(bytes); err != nil {
+		return pkgerr.Wrap(err, "client service failed respond data")
 	}
 
-	return StopSignal
+	return nil
 }
 
-func (s *Service) OnDisconnect(ctx context.Context) {
-	s.challenge = nil
-	s.difficulty = 0
-
-	if _, err := s.ddos.DecRate(ctx); err != nil {
-		zap.L().Error("Failed to decrease current rate", zap.Error(err))
-	}
-}
-
-func (s *Service) mkChallengeReq(rate int64) (*protocol.ChallengeReq, error) {
+func (s *Service) mkNonceResp(rate int64) (*protocol.NonceResp, error) {
 	difficulty := int(math.Floor(float64(rate) * s.rateDifficultyFactor))
-	if rate > int64(s.maxDifficulty) || rate <= 0 {
+	if difficulty > s.maxDifficulty {
 		difficulty = s.maxDifficulty
 	}
 
@@ -181,50 +163,23 @@ func (s *Service) mkChallengeReq(rate int64) (*protocol.ChallengeReq, error) {
 		return nil, pkgerr.Wrap(err, "client service failed to generate challenge")
 	}
 
-	return &protocol.ChallengeReq{
-		Challenge:  challenge,
+	return &protocol.NonceResp{
+		Nonce:      challenge,
 		Difficulty: difficulty,
 	}, nil
 }
 
-func (s *Service) sendErrorResponse(ctx context.Context, w serverTypes.ResponseWriter, msg string) {
+func (s *Service) sendErrorResponse(w io.Writer, msg string) error {
 	// Fixed set of error codes would be better
 	errResp := protocol.ErrorResp{Reason: msg}
 
-	data, err := s.codec.Marshal(&errResp)
+	data, err := dispatcher.EncodePackage(&errResp, s.codec)
 	if err != nil {
-		zap.L().Error("Failed to marshal error response", zap.Error(err))
-		return
+		return pkgerr.Wrap(err, "client service failed to encode ErrorResp package")
 	}
 
-	if _, err := w.Write(ctx, data); err != nil {
-		zap.L().Error("Failed to send error response", zap.Error(err))
-	}
-}
-
-func handleReadError(err error) error {
-	switch {
-	case err == nil: // Everything is ok, just read data
-	case errors.Is(err, os.ErrDeadlineExceeded): // No data received
-	case errors.Is(err, io.EOF):
-		zap.L().Info("Connection closed by client")
-		return StopSignal
-	default:
-		zap.L().Debug("Error reading data from connection", zap.Error(err))
-		return pkgerr.Wrap(err, "client service failed to read data from the connection")
-	}
-
-	return nil
-}
-
-func handleWriteError(err error) error {
-	switch {
-	case err == nil:
-	case errors.Is(err, io.EOF):
-		zap.L().Info("Connection closed by client")
-		return StopSignal
-	default:
-		return pkgerr.Wrap(err, "client service failed to send challenge request to client")
+	if _, err := w.Write(data); err != nil {
+		return pkgerr.Wrap(err, "client service failed to send ErrorResp package")
 	}
 
 	return nil

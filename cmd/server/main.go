@@ -65,19 +65,26 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	ddosGuard := ddos.NewGuard()
+	var wg sync.WaitGroup
+
+	ddosGuard := ddos.NewGuard(time.Duration(cfg.App.Window))
+
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		ddosGuard.Run(ctx)
+	}()
+
 	codec := jsonC.NewCodec()
 	userLogic := logic.New()
 
 	logicAllocator := func() server.Service {
-		return client.NewService(
-			cfg.App.MaxDifficulty, cfg.App.RateDifficultyFactor, cfg.Net.BuffSize,
-			userLogic, codec, ddosGuard)
+		return client.NewService(cfg.Net.BuffSize, cfg.App.MaxDifficulty, cfg.App.RateDifficultyFactor,
+			codec, userLogic, ddosGuard)
 	}
 
-	srv := server.New(cfg.Net.BuffSize, cfg.Net.MaxConnection, time.Duration(cfg.Net.Timeout), logicAllocator)
-
-	var wg sync.WaitGroup
+	srv := server.New(cfg.Net.MaxConnection, time.Duration(cfg.Net.Timeout), logicAllocator)
 
 	wg.Add(1)
 

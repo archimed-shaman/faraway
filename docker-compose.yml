@@ -13,6 +13,8 @@ services:
       - PORT=9090
     ports:
       - 9090:9090
+    volumes:
+      - ./conf/:/faraway/wow/conf/
     restart: no
 
   client:
@@ -27,6 +29,8 @@ services:
       - LOG_LEVEL=info
       - HOST=server
       - PORT=9090
+    volumes:
+      - ./conf/:/faraway/wow/conf/
     restart: on-failure
     depends_on:
       - server

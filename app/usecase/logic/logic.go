@@ -19,6 +19,13 @@ func New() *UserLogic {
 			"The future belongs to those who believe in the beauty of their dreams.",
 			"Do not watch the clock. Do what it does. Keep going.",
 			"Keep your face always toward the sunshine—and shadows will fall behind you.",
+			"In the end, we will remember not the words of our enemies, but the silence of our friends.",
+			"To handle yourself, use your head; to handle others, use your heart.",
+			"Life is 10% what happens to us and 90% how we react to it.",
+			"The best way to predict the future is to create it.",
+			"Do not dwell in the past, do not dream of the future, concentrate the mind on the present moment.",
+			"The only way to do great work is to love what you do.",
+			"Success is not the key to happiness. Happiness is the key to success.",
 		},
 	}
 }
