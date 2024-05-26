@@ -5,7 +5,6 @@
 *.so
 *.dylib
 main
-vendor/*
 !app/*
 .idea
 *.log
