@@ -116,7 +116,7 @@ func runConnect(ctx context.Context, cfg *config.Config) {
 	zap.L().Info("Connected to server")
 
 	if err := loop(ctx, cfg, conn, codec, disp); err != nil {
-		zap.L().Error("Disconnecting on error...", zap.Error(err))
+		zap.L().Debug("Disconnecting on error...", zap.Error(err))
 	}
 }
 

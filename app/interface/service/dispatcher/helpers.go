@@ -8,6 +8,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+//go:generate mockgen -source=$GOFILE -destination=mock/$GOFILE
+
 type Encoder interface {
 	Marshal(v any) ([]byte, error)
 }
