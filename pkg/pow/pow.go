@@ -15,7 +15,7 @@ const byteSize = 8
 var (
 	ErrInterrupted     = errors.New("resolution interrupted")
 	ErrInvalidBitCheck = errors.New("n is greater than data contains")
-	ErrUnableGenerate  = errors.New("unable generate appropriate challenge")
+	ErrUnableGenerate  = errors.New("unable to generate appropriate challenge")
 )
 
 var randBytes = rand.Read // to make it easier to mock in tests
@@ -37,7 +37,7 @@ func GenChallenge(challengeByteLen, zeroLowerBits int) ([]byte, error) {
 			return nil, pkgerr.Wrap(err, "failed to read random bytes")
 		}
 
-		// Check the hash we've generated does not contain the necessary lower zero bits
+		// Check the hash to ensure it does not end with the necessary lower zero bits
 		hash := Hash(b)
 
 		ok, err := CheckLowerBitsZero(hash, zeroLowerBits)
@@ -67,9 +67,10 @@ func CheckSolution(challenge, solution []byte, zeroLowerBits int) (bool, error) 
 
 // Resolve tries to find a solution for the given challenge by brute-forcing until the lower bits are zero.
 func Resolve(ctx context.Context, challenge []byte, zeroLowerBits int) ([]byte, error) {
-	const maxInt64 = int64(^uint64(0) >> 1)
-
-	const batchSize = 1000
+	const (
+		maxInt64  = int64(^uint64(0) >> 1)
+		batchSize = 1000
+	)
 
 	cNonce := int64(0)
 
