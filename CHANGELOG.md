@@ -1,3 +1,10 @@
+## [1.2.3](https://github.com/archimed-shaman/faraway/compare/v1.2.2...v1.2.3) (2024-05-26)
+
+
+### Bug Fixes
+
+* Refactor common code to func ([#8](https://github.com/archimed-shaman/faraway/issues/8)) ([864e8ad](https://github.com/archimed-shaman/faraway/commit/864e8ade62540628116b827032de206742891f47))
+
 ## [1.2.2](https://github.com/archimed-shaman/faraway/compare/v1.2.1...v1.2.2) (2024-05-26)
 
 
