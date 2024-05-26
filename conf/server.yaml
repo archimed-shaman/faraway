@@ -1,7 +1,8 @@
 ---
 app:
-  max_difficulty: 24         # max lower bits of challenge solution to be zero
-  rate_difficulty_factor: 4
+  window: 3s                 # time window to calculate request rate (seconds)
+  max_difficulty: 20         # max lower bits of challenge solution to be zero
+  rate_difficulty_factor: 1
 
 log:
 

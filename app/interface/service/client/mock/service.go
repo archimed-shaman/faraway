@@ -11,138 +11,12 @@ package mock_client
 
 import (
 	context "context"
+	protocol "faraway/wow/pkg/protocol"
+	io "io"
 	reflect "reflect"
 
 	gomock "go.uber.org/mock/gomock"
 )
-
-// MockDDoSGuard is a mock of DDoSGuard interface.
-type MockDDoSGuard struct {
-	ctrl     *gomock.Controller
-	recorder *MockDDoSGuardMockRecorder
-}
-
-// MockDDoSGuardMockRecorder is the mock recorder for MockDDoSGuard.
-type MockDDoSGuardMockRecorder struct {
-	mock *MockDDoSGuard
-}
-
-// NewMockDDoSGuard creates a new mock instance.
-func NewMockDDoSGuard(ctrl *gomock.Controller) *MockDDoSGuard {
-	mock := &MockDDoSGuard{ctrl: ctrl}
-	mock.recorder = &MockDDoSGuardMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockDDoSGuard) EXPECT() *MockDDoSGuardMockRecorder {
-	return m.recorder
-}
-
-// DecRate mocks base method.
-func (m *MockDDoSGuard) DecRate(ctx context.Context) (int64, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DecRate", ctx)
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// DecRate indicates an expected call of DecRate.
-func (mr *MockDDoSGuardMockRecorder) DecRate(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecRate", reflect.TypeOf((*MockDDoSGuard)(nil).DecRate), ctx)
-}
-
-// IncRate mocks base method.
-func (m *MockDDoSGuard) IncRate(ctx context.Context) (int64, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IncRate", ctx)
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// IncRate indicates an expected call of IncRate.
-func (mr *MockDDoSGuardMockRecorder) IncRate(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncRate", reflect.TypeOf((*MockDDoSGuard)(nil).IncRate), ctx)
-}
-
-// MockEncoder is a mock of Encoder interface.
-type MockEncoder struct {
-	ctrl     *gomock.Controller
-	recorder *MockEncoderMockRecorder
-}
-
-// MockEncoderMockRecorder is the mock recorder for MockEncoder.
-type MockEncoderMockRecorder struct {
-	mock *MockEncoder
-}
-
-// NewMockEncoder creates a new mock instance.
-func NewMockEncoder(ctrl *gomock.Controller) *MockEncoder {
-	mock := &MockEncoder{ctrl: ctrl}
-	mock.recorder = &MockEncoderMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockEncoder) EXPECT() *MockEncoderMockRecorder {
-	return m.recorder
-}
-
-// Marshal mocks base method.
-func (m *MockEncoder) Marshal(v any) ([]byte, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Marshal", v)
-	ret0, _ := ret[0].([]byte)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Marshal indicates an expected call of Marshal.
-func (mr *MockEncoderMockRecorder) Marshal(v any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Marshal", reflect.TypeOf((*MockEncoder)(nil).Marshal), v)
-}
-
-// MockDecoder is a mock of Decoder interface.
-type MockDecoder struct {
-	ctrl     *gomock.Controller
-	recorder *MockDecoderMockRecorder
-}
-
-// MockDecoderMockRecorder is the mock recorder for MockDecoder.
-type MockDecoderMockRecorder struct {
-	mock *MockDecoder
-}
-
-// NewMockDecoder creates a new mock instance.
-func NewMockDecoder(ctrl *gomock.Controller) *MockDecoder {
-	mock := &MockDecoder{ctrl: ctrl}
-	mock.recorder = &MockDecoderMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockDecoder) EXPECT() *MockDecoderMockRecorder {
-	return m.recorder
-}
-
-// Unmarshal mocks base method.
-func (m *MockDecoder) Unmarshal(data []byte, v any) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Unmarshal", data, v)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Unmarshal indicates an expected call of Unmarshal.
-func (mr *MockDecoderMockRecorder) Unmarshal(data, v any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unmarshal", reflect.TypeOf((*MockDecoder)(nil).Unmarshal), data, v)
-}
 
 // MockCodec is a mock of Codec interface.
 type MockCodec struct {
@@ -165,6 +39,21 @@ func NewMockCodec(ctrl *gomock.Controller) *MockCodec {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockCodec) EXPECT() *MockCodecMockRecorder {
 	return m.recorder
+}
+
+// GetRaw mocks base method.
+func (m *MockCodec) GetRaw(r io.Reader, buff []byte) (*protocol.Package, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRaw", r, buff)
+	ret0, _ := ret[0].(*protocol.Package)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRaw indicates an expected call of GetRaw.
+func (mr *MockCodecMockRecorder) GetRaw(r, buff any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRaw", reflect.TypeOf((*MockCodec)(nil).GetRaw), r, buff)
 }
 
 // Marshal mocks base method.
@@ -194,6 +83,44 @@ func (m *MockCodec) Unmarshal(data []byte, v any) error {
 func (mr *MockCodecMockRecorder) Unmarshal(data, v any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unmarshal", reflect.TypeOf((*MockCodec)(nil).Unmarshal), data, v)
+}
+
+// MockDDoSGuard is a mock of DDoSGuard interface.
+type MockDDoSGuard struct {
+	ctrl     *gomock.Controller
+	recorder *MockDDoSGuardMockRecorder
+}
+
+// MockDDoSGuardMockRecorder is the mock recorder for MockDDoSGuard.
+type MockDDoSGuardMockRecorder struct {
+	mock *MockDDoSGuard
+}
+
+// NewMockDDoSGuard creates a new mock instance.
+func NewMockDDoSGuard(ctrl *gomock.Controller) *MockDDoSGuard {
+	mock := &MockDDoSGuard{ctrl: ctrl}
+	mock.recorder = &MockDDoSGuardMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockDDoSGuard) EXPECT() *MockDDoSGuardMockRecorder {
+	return m.recorder
+}
+
+// IncRate mocks base method.
+func (m *MockDDoSGuard) IncRate(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IncRate", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IncRate indicates an expected call of IncRate.
+func (mr *MockDDoSGuardMockRecorder) IncRate(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncRate", reflect.TypeOf((*MockDDoSGuard)(nil).IncRate), ctx)
 }
 
 // MockUserLogic is a mock of UserLogic interface.

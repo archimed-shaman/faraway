@@ -19,30 +19,22 @@ import (
 //go:generate mockgen -source=$GOFILE -destination=mock/$GOFILE
 
 type Service interface {
-	// // io.EOF is expected as the signal of end of processing.
-	// OnConnect(ctx context.Context, w types.ResponseWriter) error
-
 	// Connection will be served until err is nil.
-	// io.EOF is expected as the signal of end of processing.
 	Handle(ctx context.Context, r io.Reader, w io.Writer) error
-
-	// OnDisconnect(ctx context.Context)
 }
 
 type Server struct {
 	maxConnections int32
 	servicePool    sync.Pool
-	buffSize       int
 	timeout        time.Duration
 	count          atomic.Int32
 	wg             sync.WaitGroup
 }
 
-func New(buffSize int, maxConnections int32, timeout time.Duration, allocService func() Service) *Server {
+func New(maxConnections int32, timeout time.Duration, allocService func() Service) *Server {
 	return &Server{
 		maxConnections: maxConnections,
 		servicePool:    sync.Pool{New: func() any { return allocService() }},
-		buffSize:       buffSize,
 		timeout:        timeout,
 		count:          atomic.Int32{},
 		wg:             sync.WaitGroup{},
@@ -112,7 +104,7 @@ func (s *Server) accept(ctx context.Context, conn net.Conn, count int32) {
 	defer s.putService(service)
 
 	zap.L().Info("New client connected", zap.String("addr", conn.RemoteAddr().String()))
-	handleClient(ctx, conn, s.timeout, s.buffSize, service)
+	handleClient(ctx, conn, s.timeout, service)
 	zap.L().Info("Client disconnected", zap.String("addr", conn.RemoteAddr().String()))
 }
 

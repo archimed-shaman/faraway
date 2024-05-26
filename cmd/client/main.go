@@ -100,8 +100,8 @@ func runConnect(ctx context.Context, cfg *config.Config) {
 		dispatcher.NewProcessor(func(ctx context.Context, pkg *protocol.NonceResp, w io.Writer) error {
 			return onNonceResp(ctx, time.Duration(cfg.Net.Timeout), codec, pkg, w)
 		}),
-		dispatcher.NewProcessor(func(ctx context.Context, pkg *protocol.DataResp, w io.Writer) error {
-			return onDataResp(ctx, codec, pkg, w)
+		dispatcher.NewProcessor(func(_ context.Context, pkg *protocol.DataResp, w io.Writer) error {
+			return onDataResp(codec, pkg, w)
 		}),
 		dispatcher.NewProcessor(onErrorResp),
 	)
@@ -139,7 +139,7 @@ func loop(ctx context.Context,
 			return nil
 		default:
 			if err := disp.Dispatch(ctx, conn, conn, buff); err != nil {
-				return err
+				return pkgerr.Wrap(err, "failed to dispatch")
 			}
 		}
 	}
@@ -168,18 +168,18 @@ func onNonceResp(ctx context.Context,
 		CNonce:     cNonce,
 	}, codec)
 	if err != nil {
-		return err
+		return pkgerr.Wrap(err, "failed to encode package with DataReq")
 	}
 
 	_, err = w.Write(data)
 	if err != nil {
-		return err
+		return pkgerr.Wrap(err, "failed to send DataReq")
 	}
 
 	return nil
 }
 
-func onDataResp(ctx context.Context, codec Codec, pkg *protocol.DataResp, w io.Writer) error {
+func onDataResp(codec Codec, pkg *protocol.DataResp, w io.Writer) error {
 	zap.L().Info("Client received data", zap.ByteString("quote", pkg.Payload))
 
 	if err := sendNonceReq(codec, w); err != nil {
@@ -197,12 +197,12 @@ func onErrorResp(ctx context.Context, pkg *protocol.ErrorResp, w io.Writer) erro
 func sendNonceReq(codec Codec, w io.Writer) error {
 	data, err := dispatcher.EncodePackage(&protocol.NonceReq{}, codec)
 	if err != nil {
-		return err
+		return pkgerr.Wrap(err, "failed to encode package with NonceReq")
 	}
 
 	_, err = w.Write(data)
 	if err != nil {
-		return err
+		return pkgerr.Wrap(err, "failed to send NonceReq")
 	}
 
 	return nil

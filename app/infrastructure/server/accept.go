@@ -11,10 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func handleClient(ctx context.Context,
-	conn net.Conn, timeout time.Duration, buffSize int,
-	service Service,
-) {
+func handleClient(ctx context.Context, conn net.Conn, timeout time.Duration, service Service) {
 	for {
 		if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
 			zap.L().Debug("Error setting read deadline for the connection", zap.Error(err))

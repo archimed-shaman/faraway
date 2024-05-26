@@ -11,7 +11,7 @@ package mock_server
 
 import (
 	context "context"
-	types "faraway/wow/app/infrastructure/server/types"
+	io "io"
 	reflect "reflect"
 
 	gomock "go.uber.org/mock/gomock"
@@ -40,42 +40,16 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 	return m.recorder
 }
 
-// OnConnect mocks base method.
-func (m *MockService) OnConnect(ctx context.Context, w types.ResponseWriter) error {
+// Handle mocks base method.
+func (m *MockService) Handle(ctx context.Context, r io.Reader, w io.Writer) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OnConnect", ctx, w)
+	ret := m.ctrl.Call(m, "Handle", ctx, r, w)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// OnConnect indicates an expected call of OnConnect.
-func (mr *MockServiceMockRecorder) OnConnect(ctx, w any) *gomock.Call {
+// Handle indicates an expected call of Handle.
+func (mr *MockServiceMockRecorder) Handle(ctx, r, w any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnConnect", reflect.TypeOf((*MockService)(nil).OnConnect), ctx, w)
-}
-
-// OnData mocks base method.
-func (m *MockService) OnData(ctx context.Context, r types.ResponseReader, w types.ResponseWriter) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OnData", ctx, r, w)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// OnData indicates an expected call of OnData.
-func (mr *MockServiceMockRecorder) OnData(ctx, r, w any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnData", reflect.TypeOf((*MockService)(nil).OnData), ctx, r, w)
-}
-
-// OnDisconnect mocks base method.
-func (m *MockService) OnDisconnect(ctx context.Context) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnDisconnect", ctx)
-}
-
-// OnDisconnect indicates an expected call of OnDisconnect.
-func (mr *MockServiceMockRecorder) OnDisconnect(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnDisconnect", reflect.TypeOf((*MockService)(nil).OnDisconnect), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockService)(nil).Handle), ctx, r, w)
 }

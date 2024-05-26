@@ -1,6 +1,7 @@
 package pow
 
 import (
+	"context"
 	"faraway/wow/pkg/test"
 	"fmt"
 	"testing"
@@ -294,7 +295,7 @@ func TestResolve_Success(t *testing.T) {
 
 	expected := []byte{0x01, 0xf9} // Precalculated solution
 
-	got, err := Resolve(challenge, 8)
+	got, err := Resolve(context.Background(), challenge, 8)
 	test.Nil(t, "Resolve error", err)
 
 	test.Check(t, "Solution for 0x050403020100", expected, got)

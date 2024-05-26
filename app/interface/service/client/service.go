@@ -5,7 +5,6 @@ import (
 	"faraway/wow/app/interface/service/dispatcher"
 	"faraway/wow/pkg/pow"
 	"faraway/wow/pkg/protocol"
-	"fmt"
 	"io"
 	"math"
 
@@ -28,7 +27,6 @@ type Codec interface {
 
 type DDoSGuard interface {
 	IncRate(ctx context.Context) (int64, error)
-	DecRate(ctx context.Context) (int64, error)
 }
 
 type UserLogic interface {
@@ -94,7 +92,7 @@ func (s *Service) onNonceReq(ctx context.Context, pkg *protocol.NonceReq, w io.W
 	if err != nil {
 		zap.L().Error("Failed to make challenge request", zap.Error(err))
 
-		if sendErr := s.sendErrorResponse(ctx, w, "Failed to make challenge request"); sendErr != nil {
+		if sendErr := s.sendErrorResponse(w, "Failed to make challenge request"); sendErr != nil {
 			zap.L().Error("Failed to send error", zap.Error(err))
 		}
 
@@ -129,7 +127,7 @@ func (s *Service) onDataReq(ctx context.Context, pkg *protocol.DataReq, w io.Wri
 			zap.Int("difficulty", s.difficulty),
 		)
 
-		if sendErr := s.sendErrorResponse(ctx, w, "Bad challenge solution"); sendErr != nil {
+		if sendErr := s.sendErrorResponse(w, "Bad challenge solution"); sendErr != nil {
 			zap.L().Error("Failed to send error", zap.Error(err))
 		}
 
@@ -160,8 +158,6 @@ func (s *Service) mkNonceResp(rate int64) (*protocol.NonceResp, error) {
 		difficulty = s.maxDifficulty
 	}
 
-	fmt.Println(rate, s.maxDifficulty, difficulty)
-
 	challenge, err := pow.GenChallenge(challengeLen, difficulty)
 	if err != nil {
 		return nil, pkgerr.Wrap(err, "client service failed to generate challenge")
@@ -173,7 +169,7 @@ func (s *Service) mkNonceResp(rate int64) (*protocol.NonceResp, error) {
 	}, nil
 }
 
-func (s *Service) sendErrorResponse(ctx context.Context, w io.Writer, msg string) error {
+func (s *Service) sendErrorResponse(w io.Writer, msg string) error {
 	// Fixed set of error codes would be better
 	errResp := protocol.ErrorResp{Reason: msg}
 
