@@ -16,6 +16,14 @@ func Nil(t *testing.T, what string, got any) {
 	}
 }
 
+func NotNil(t *testing.T, what string, got any) {
+	t.Helper()
+
+	if cmp.Equal(nil, got) {
+		t.Errorf("%s expected: [not nil], got: [%v]", what, got)
+	}
+}
+
 func Err(t *testing.T, what string, expected, got error) {
 	t.Helper()
 
