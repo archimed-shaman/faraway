@@ -19,6 +19,9 @@ type DDoSGuard struct {
 
 func NewGuard(window time.Duration) *DDoSGuard {
 	n := int(window.Seconds()) - 1
+	if n < 0 {
+		n = 0
+	}
 
 	return &DDoSGuard{
 		window:   ring.New(n),
@@ -50,17 +53,12 @@ func (s *DDoSGuard) reset() {
 	lastSec := s.current.Swap(0)
 
 	if s.window.Len() > 0 {
+		if value, ok := s.window.Value.(int64); ok {
+			s.windowed.Add(-value) // remove the current sum, it will be replaced
+		}
+
 		s.window.Value = lastSec
+		s.windowed.Add(lastSec)
 		s.window = s.window.Next()
-
-		windowed := int64(0)
-
-		s.window.Do(func(p any) {
-			if val, ok := p.(int64); ok {
-				windowed += val
-			}
-		})
-
-		s.windowed.Swap(windowed)
 	}
 }
