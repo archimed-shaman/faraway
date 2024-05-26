@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/archimed-shaman/faraway/compare/v1.1.1...v1.2.0) (2024-05-26)
+
+
+### Features
+
+* Client-server interaction refactoring ([#5](https://github.com/archimed-shaman/faraway/issues/5)) ([533d41a](https://github.com/archimed-shaman/faraway/commit/533d41af07dc60723ccc7a8f6f1f6b3ac28a06f4))
+
 ## [1.1.1](https://github.com/archimed-shaman/faraway/compare/v1.1.0...v1.1.1) (2024-05-25)
 
 
