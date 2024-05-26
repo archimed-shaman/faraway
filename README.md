@@ -12,7 +12,7 @@ Design and implement “Word of Wisdom” tcp server.
 
 ### Network protocol
 
-In this case, JSON is chosen for simplicity in the test project. The existing JSON protocol can be enhanced by adding a message tag and incorporating static error codes. However, it is not very suitable for real production usage with a TCP server because it is not optimal in size, not the fastest in terms of marshalling, dispatching, and additionally, it does not provide information about message length, which is crucial in network data transmission.
+In this case, JSON is chosen for simplicity in the test project. The existing JSON protocol can be enhanced by adding incorporating static error codes. However, it is not very suitable for real production usage with a TCP server because it is not optimal in size, not the fastest in terms of marshalling, dispatching, and additionally, it does not provide information about message length, which is crucial in network data transmission.
 
 For a real production scenario, something like protobuf, [msgpack](https://msgpack.org), or a custom binary Tag-Length-Value protocol would be more appropriate. The choice should depend on the planned client-server interaction, client specificity (for example, mobile clients might require traffic minimization), the project's ecosystem, and available diagnostic tools (it might be necessary, for example, to implement a plugin for Wireshark).
 
@@ -20,7 +20,7 @@ Also, in a real production environment, encryption between the client and server
 
 ### Synchronous client and server
 
-To avoid overengineering, both the server and client were implemented to be synchronous (a specific sequence of messages is expected). With an asynchronous client and server, it would have required complicating the logic by adding something like an FSM and a message dispatcher.
+To avoid overengineering, both the server and client were implemented to be synchronous (a specific sequence of messages is expected). With an asynchronous client and server, it would have required complicating the logic by adding something like an FSM.
 
 ### Proof of work algorithm
 
@@ -33,10 +33,9 @@ mask = (1 << number_of_low_bits) - 1
 isValid = (sha256(nonce + cnonce) & mask) == 0
 ```
 
-Obviously, for real protection, the complexity of such an algorithm will not be sufficient, and a more complex challenge should be introduced. As an option, you can also consider another cryptographic function, such as [Argon2](https://en.wikipedia.org/wiki/Argon2), or some other [KDF](https://en.wikipedia.org/wiki/Key_derivation_function), since they are typically designed to be resource-intensive for brute-force attacks.
+For real protection, the complexity of such an algorithm may be not sufficient, and a more complex challenge may be introduced. As an option, you can also consider another cryptographic function, such as [Argon2](https://en.wikipedia.org/wiki/Argon2), or some other [KDF](https://en.wikipedia.org/wiki/Key_derivation_function), since they are typically designed to be resource-intensive for brute-force attacks.
 
-### Network interaction
-There is a wide scope for improving the network code - for example, by implementing reconnection after a disconnect or by handling large amounts of data that do not fit into the buffer all at once.
+And of course, it is important to understand that this is not a panacea for DDoS attacks, and it will not protect, for example, from exhausted descriptors or a congested network channel with multiple connections. In such cases, additional measures may be required, such as limiting connections, optimizing the performance of network interfaces, and using specialized solutions for DDoS protection at the infrastructure level.
 
 ### Logging
 
