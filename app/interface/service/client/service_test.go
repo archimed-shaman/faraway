@@ -45,13 +45,13 @@ func TestService_OnConnect(t *testing.T) {
 
 	mockCodec.EXPECT().Marshal(gomock.Any()).
 		DoAndReturn(func(v any) ([]byte, error) {
-			req, ok := v.(*protocol.ChallengeReq)
+			req, ok := v.(*protocol.NonceResp)
 			if !ok {
 				t.Errorf("Bad type: %s (%+v)", reflect.TypeOf(v), v)
 				return nil, errTestAssertionFailed
 			}
 
-			challenge = req.Challenge
+			challenge = req.Nonce
 
 			return mockedChallenge, nil
 		})
@@ -88,9 +88,9 @@ func TestService_OnData(t *testing.T) {
 	}
 	solution := []byte{20}
 
-	challengeResp := protocol.ChallengeResp{
-		Challenge:  challenge,
-		Solution:   solution,
+	challengeResp := protocol.GetDataReq{
+		Nonce:      challenge,
+		CNonce:     solution,
 		Difficulty: rate,
 	}
 
@@ -100,7 +100,7 @@ func TestService_OnData(t *testing.T) {
 	mockReader.EXPECT().Data().Return(io.NopCloser(bytes.NewReader(challengeRespBytes)))
 	mockCodec.EXPECT().Unmarshal(challengeRespBytes, gomock.Any()).
 		DoAndReturn(func(data []byte, v any) error {
-			resp, ok := v.(*protocol.ChallengeResp)
+			resp, ok := v.(*protocol.GetDataReq)
 			if !ok {
 				t.Errorf("Bad type: %s (%+v)", reflect.TypeOf(v), v)
 				return errTestAssertionFailed
@@ -115,14 +115,14 @@ func TestService_OnData(t *testing.T) {
 
 	mockLogic.EXPECT().GetQuote(gomock.Any()).Return(quote, nil)
 
-	data := protocol.Data{
+	data := protocol.DataResp{
 		Payload: []byte(quote),
 	}
 	mockedData := []byte("mocked data")
 
 	mockCodec.EXPECT().Marshal(gomock.Any()).
 		DoAndReturn(func(v any) ([]byte, error) {
-			req, ok := v.(*protocol.Data)
+			req, ok := v.(*protocol.DataResp)
 			if !ok {
 				t.Errorf("Bad type: %s (%+v)", reflect.TypeOf(v), v)
 				return nil, errTestAssertionFailed

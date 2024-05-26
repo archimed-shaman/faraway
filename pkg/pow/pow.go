@@ -1,6 +1,7 @@
 package pow
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"errors"
@@ -12,8 +13,9 @@ import (
 const byteSize = 8
 
 var (
-	ErrUnableGenerate  = errors.New("unable generate appropriate challenge")
+	ErrInterrupted     = errors.New("resolution interrupted")
 	ErrInvalidBitCheck = errors.New("n is greater than data contains")
+	ErrUnableGenerate  = errors.New("unable generate appropriate challenge")
 )
 
 var randBytes = rand.Read // to make it easier to mock in tests
@@ -64,19 +66,32 @@ func CheckSolution(challenge, solution []byte, zeroLowerBits int) (bool, error) 
 }
 
 // Resolve tries to find a solution for the given challenge by brute-forcing until the lower bits are zero.
-func Resolve(challenge []byte, zeroLowerBits int) ([]byte, error) {
+func Resolve(ctx context.Context, challenge []byte, zeroLowerBits int) ([]byte, error) {
 	const maxInt64 = int64(^uint64(0) >> 1)
 
-	for i := int64(0); i < maxInt64; i++ {
-		solution := big.NewInt(i).Bytes()
+	const batchSize = 1000
 
-		ok, err := CheckSolution(challenge, solution, zeroLowerBits)
-		if err != nil {
-			return nil, err
-		}
+	cNonce := int64(0)
 
-		if ok {
-			return solution, nil
+	for i := int64(0); i < maxInt64; i += batchSize {
+		select {
+		case <-ctx.Done():
+			return nil, ErrInterrupted
+		default:
+			for j := 0; j < int(batchSize); j++ {
+				solution := big.NewInt(cNonce).Bytes()
+
+				ok, err := CheckSolution(challenge, solution, zeroLowerBits)
+				if err != nil {
+					return nil, err
+				}
+
+				if ok {
+					return solution, nil
+				}
+
+				cNonce++
+			}
 		}
 	}
 

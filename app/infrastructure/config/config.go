@@ -67,7 +67,7 @@ func logStruct(prefix string, val reflect.Value, logger *zap.Logger) {
 				displayedValue = displaySecret(displayedValue)
 			}
 
-			logger.Info("Config", zap.String(prefix, displayedValue))
+			logger.Info("Config", zap.String(prefix+":"+displayedName, displayedValue))
 		}
 	}
 }

@@ -70,9 +70,8 @@ func main() {
 	userLogic := logic.New()
 
 	logicAllocator := func() server.Service {
-		return client.NewService(
-			cfg.App.MaxDifficulty, cfg.App.RateDifficultyFactor, cfg.Net.BuffSize,
-			userLogic, codec, ddosGuard)
+		return client.NewService(cfg.Net.BuffSize, cfg.App.MaxDifficulty, cfg.App.RateDifficultyFactor,
+			codec, userLogic, ddosGuard)
 	}
 
 	srv := server.New(cfg.Net.BuffSize, cfg.Net.MaxConnection, time.Duration(cfg.Net.Timeout), logicAllocator)

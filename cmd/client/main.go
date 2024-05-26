@@ -1,14 +1,19 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"faraway/wow/app/infrastructure/config"
 	jsonC "faraway/wow/app/interface/service/codec/json"
+	"faraway/wow/app/interface/service/dispatcher"
 	"faraway/wow/pkg/pow"
 	"faraway/wow/pkg/protocol"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -17,17 +22,12 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-type Encoder interface {
-	Marshal(v any) ([]byte, error)
-}
-
-type Decoder interface {
-	Unmarshal(data []byte, v interface{}) error
-}
+var ErrServerError = errors.New("server error")
 
 type Codec interface {
-	Encoder
-	Decoder
+	GetRaw(r io.Reader, buff []byte) (*protocol.Package, error)
+	Unmarshal(data []byte, v any) error
+	Marshal(v any) ([]byte, error)
 }
 
 func init() {
@@ -45,7 +45,7 @@ func init() {
 
 	level, err := zapcore.ParseLevel(cfg.Log.Level)
 	if err != nil {
-		// TODO: wraning
+		// TODO: warning
 		level = zap.InfoLevel
 	}
 
@@ -63,22 +63,48 @@ func main() {
 
 	cfg := config.Get()
 
-	for {
-		select {
-		case sig := <-signals:
-			zap.L().Info("Client interrupted", zap.String("signal", sig.String()))
-			return
+	ctx, cancel := context.WithCancel(context.Background())
 
-		default:
-			run(cfg)
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				runConnect(ctx, cfg)
+			}
 		}
-	}
+	}()
+
+	sig := <-signals
+
+	zap.L().Info("Client interrupted", zap.String("signal", sig.String()))
+	cancel()
+
+	wg.Wait()
 }
 
-func run(cfg *config.Config) {
+func runConnect(ctx context.Context, cfg *config.Config) {
 	defer func() { _ = zap.L().Sync() }()
 
 	codec := jsonC.NewCodec()
+	disp := dispatcher.New(codec)
+
+	disp.Register(
+		dispatcher.NewProcessor(func(ctx context.Context, pkg *protocol.NonceResp, w io.Writer) error {
+			return onNonceResp(ctx, time.Duration(cfg.Net.Timeout), codec, pkg, w)
+		}),
+		dispatcher.NewProcessor(func(ctx context.Context, pkg *protocol.DataResp, w io.Writer) error {
+			return onDataResp(ctx, codec, pkg, w)
+		}),
+		dispatcher.NewProcessor(onErrorResp),
+	)
 
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", cfg.Net.Host, cfg.Net.Port))
 	if err != nil {
@@ -89,78 +115,94 @@ func run(cfg *config.Config) {
 
 	zap.L().Info("Connected to server")
 
-	// Read initial challenge request
-	challengeReq, err := readData[protocol.ChallengeReq](conn, codec,
-		time.Duration(cfg.Net.Timeout), cfg.Net.BuffSize)
-	if err != nil {
-		zap.L().Error("Failed to read data from server", zap.Error(err))
-		return
+	if err := loop(ctx, cfg, conn, codec, disp); err != nil {
+		zap.L().Error("Disconnecting on error...", zap.Error(err))
+	}
+}
+
+func loop(ctx context.Context,
+	cfg *config.Config, conn net.Conn, codec Codec, disp *dispatcher.Dispatcher,
+) error {
+	if err := sendNonceReq(codec, conn); err != nil {
+		return err
 	}
 
+	buff := make([]byte, cfg.Net.BuffSize)
+
+	for {
+		if err := conn.SetDeadline(time.Now().Add(time.Duration(cfg.Net.Timeout))); err != nil {
+			return pkgerr.Wrap(err, "failed to set connection timeout")
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+			if err := disp.Dispatch(ctx, conn, conn, buff); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func onNonceResp(ctx context.Context,
+	timeout time.Duration, codec Codec, pkg *protocol.NonceResp, w io.Writer,
+) error {
 	start := time.Now()
 
-	solution, err := pow.Resolve(challengeReq.Challenge, challengeReq.Difficulty)
+	dlCtx, cancel := context.WithDeadline(ctx, start.Add(timeout))
+	defer cancel()
+
+	cNonce, err := pow.Resolve(dlCtx, pkg.Nonce, pkg.Difficulty)
 	if err != nil {
-		zap.L().Fatal("Failed to find solution for challenge", zap.Error(err))
+		zap.L().Error("Failed to find solution for challenge",
+			zap.Int("difficulty", pkg.Difficulty), zap.Error(err))
 	}
 
 	zap.L().Info("Challenge solution found",
-		zap.Int("difficulty", challengeReq.Difficulty), zap.Duration("elapsed", time.Since(start)))
+		zap.Int("difficulty", pkg.Difficulty), zap.Duration("elapsed", time.Since(start)))
 
-	if err = writeData(conn, codec, time.Duration(cfg.Net.Timeout), &protocol.ChallengeResp{
-		Challenge:  challengeReq.Challenge,
-		Difficulty: challengeReq.Difficulty,
-		Solution:   solution,
-	}); err != nil {
-		zap.L().Error("Failed to send challenge response", zap.Error(err))
-		return
-	}
-
-	// Read initial challenge request
-	data, err := readData[protocol.Data](conn, codec, time.Duration(cfg.Net.Timeout), cfg.Net.BuffSize)
+	data, err := dispatcher.EncodePackage(&protocol.DataReq{
+		Nonce:      pkg.Nonce,
+		Difficulty: pkg.Difficulty,
+		CNonce:     cNonce,
+	}, codec)
 	if err != nil {
-		zap.L().Error("Failed to get data from server", zap.Error(err))
-		return
+		return err
 	}
 
-	zap.L().Info("Quote received", zap.String("quote", string(data.Payload)))
+	_, err = w.Write(data)
+	if err != nil {
+		return err
+	}
 
-	zap.L().Info("Client shutting down")
+	return nil
 }
 
-func readData[A any](conn net.Conn, codec Codec, timeout time.Duration, buffSize int) (*A, error) {
-	buffer := make([]byte, buffSize)
+func onDataResp(ctx context.Context, codec Codec, pkg *protocol.DataResp, w io.Writer) error {
+	zap.L().Info("Client received data", zap.ByteString("quote", pkg.Payload))
 
-	if err := conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
-		return nil, pkgerr.Wrap(err, "failed to set read timeout")
+	if err := sendNonceReq(codec, w); err != nil {
+		return err
 	}
 
-	n, err := conn.Read(buffer)
-	if err != nil {
-		return nil, pkgerr.Wrap(err, "failed to read data from server")
-	}
-
-	var inst A
-
-	if err := codec.Unmarshal(buffer[:n], &inst); err != nil {
-		return nil, pkgerr.Wrapf(err, "failed to unmarshal data from server")
-	}
-
-	return &inst, nil
+	return nil
 }
 
-func writeData[A any](conn net.Conn, codec Codec, timeout time.Duration, obj *A) error {
-	byteObj, err := codec.Marshal(obj)
+func onErrorResp(ctx context.Context, pkg *protocol.ErrorResp, w io.Writer) error {
+	zap.L().Error("Server returned error", zap.ByteString("error", []byte(pkg.Reason)))
+	return pkgerr.Wrap(ErrServerError, pkg.Reason)
+}
+
+func sendNonceReq(codec Codec, w io.Writer) error {
+	data, err := dispatcher.EncodePackage(&protocol.NonceReq{}, codec)
 	if err != nil {
-		return pkgerr.Wrap(err, "failed to marshal data")
+		return err
 	}
 
-	if err := conn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
-		return pkgerr.Wrap(err, "failed to set write timeout")
-	}
-
-	if _, err := conn.Write(byteObj); err != nil {
-		return pkgerr.Wrap(err, "failed to write data to server")
+	_, err = w.Write(data)
+	if err != nil {
+		return err
 	}
 
 	return nil

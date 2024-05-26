@@ -30,7 +30,7 @@ It can be described by the following pseudocode:
 ```
 number_of_low_bits = rate * factor
 mask = (1 << number_of_low_bits) - 1
-result = (sha256(challenge + solution) & mask) == 0
+isValid = (sha256(nonce + cnonce) & mask) == 0
 ```
 
 Obviously, for real protection, the complexity of such an algorithm will not be sufficient, and a more complex challenge should be introduced. As an option, you can also consider another cryptographic function, such as [Argon2](https://en.wikipedia.org/wiki/Argon2), or some other [KDF](https://en.wikipedia.org/wiki/Key_derivation_function), since they are typically designed to be resource-intensive for brute-force attacks.
