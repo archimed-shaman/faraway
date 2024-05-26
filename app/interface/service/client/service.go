@@ -92,7 +92,7 @@ func (s *Service) onNonceReq(ctx context.Context, pkg *protocol.NonceReq, w io.W
 	if err != nil {
 		zap.L().Error("Failed to make challenge request", zap.Error(err))
 
-		if sendErr := s.sendErrorResponse(w, "Failed to make challenge request"); sendErr != nil {
+		if sendErr := s.sendError(w, "Failed to make challenge request"); sendErr != nil {
 			zap.L().Error("Failed to send error", zap.Error(err))
 		}
 
@@ -102,13 +102,8 @@ func (s *Service) onNonceReq(ctx context.Context, pkg *protocol.NonceReq, w io.W
 	s.challenge = nonceResp.Nonce
 	s.difficulty = nonceResp.Difficulty
 
-	bytes, err := dispatcher.EncodePackage(nonceResp, s.codec)
-	if err != nil {
-		return pkgerr.Wrap(err, "client service failed to encode nonce response")
-	}
-
-	if _, err := w.Write(bytes); err != nil {
-		return pkgerr.Wrap(err, "client service failed respond nonce")
+	if err := sendResp(nonceResp, w, s.codec); err != nil {
+		return err
 	}
 
 	return nil
@@ -127,7 +122,7 @@ func (s *Service) onDataReq(ctx context.Context, pkg *protocol.DataReq, w io.Wri
 			zap.Int("difficulty", s.difficulty),
 		)
 
-		if sendErr := s.sendErrorResponse(w, "Bad challenge solution"); sendErr != nil {
+		if sendErr := s.sendError(w, "Bad challenge solution"); sendErr != nil {
 			zap.L().Error("Failed to send error", zap.Error(err))
 		}
 
@@ -140,13 +135,8 @@ func (s *Service) onDataReq(ctx context.Context, pkg *protocol.DataReq, w io.Wri
 		return pkgerr.Wrap(err, "client service failed to get quote")
 	}
 
-	bytes, err := dispatcher.EncodePackage(&protocol.DataResp{Payload: []byte(quote)}, s.codec)
-	if err != nil {
-		return pkgerr.Wrap(err, "client service failed to encode data response")
-	}
-
-	if _, err := w.Write(bytes); err != nil {
-		return pkgerr.Wrap(err, "client service failed respond data")
+	if err := sendResp(&protocol.DataResp{Payload: []byte(quote)}, w, s.codec); err != nil {
+		return err
 	}
 
 	return nil
@@ -169,17 +159,24 @@ func (s *Service) mkNonceResp(rate int64) (*protocol.NonceResp, error) {
 	}, nil
 }
 
-func (s *Service) sendErrorResponse(w io.Writer, msg string) error {
+func (s *Service) sendError(w io.Writer, msg string) error {
 	// Fixed set of error codes would be better
 	errResp := protocol.ErrorResp{Reason: msg}
+	if err := sendResp(&errResp, w, s.codec); err != nil {
+		return err
+	}
 
-	data, err := dispatcher.EncodePackage(&errResp, s.codec)
+	return nil
+}
+
+func sendResp[T any](resp *T, w io.Writer, codec Codec) error {
+	data, err := dispatcher.EncodePackage(resp, codec)
 	if err != nil {
-		return pkgerr.Wrap(err, "client service failed to encode ErrorResp package")
+		return pkgerr.Wrap(err, "client service failed to encode package")
 	}
 
 	if _, err := w.Write(data); err != nil {
-		return pkgerr.Wrap(err, "client service failed to send ErrorResp package")
+		return pkgerr.Wrap(err, "client service failed to send package")
 	}
 
 	return nil
