@@ -1,3 +1,10 @@
+## [1.2.2](https://github.com/archimed-shaman/faraway/compare/v1.2.1...v1.2.2) (2024-05-26)
+
+
+### Bug Fixes
+
+* Remove stale code ([#7](https://github.com/archimed-shaman/faraway/issues/7)) ([e9b8e84](https://github.com/archimed-shaman/faraway/commit/e9b8e84555c8eeb3ab47fab47a49bfb4b08e9e19))
+
 ## [1.2.1](https://github.com/archimed-shaman/faraway/compare/v1.2.0...v1.2.1) (2024-05-26)
 
 
