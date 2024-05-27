@@ -44,7 +44,7 @@ type Service struct {
 
 	// Client state
 	// FIXME: add outstanding state holder or make it stateless (like JWT)
-	challenge  []byte
+	nonce      []byte
 	difficulty int
 }
 
@@ -60,8 +60,8 @@ func NewService(
 		codec:                codec,
 		ddos:                 ddos,
 		logic:                logic,
-		challenge:            nil,
-		difficulty:           0,
+		nonce:                nil,
+		difficulty:           maxDifficulty,
 	}
 
 	service.dispatcher.Register(
@@ -99,7 +99,7 @@ func (s *Service) onNonceReq(ctx context.Context, pkg *protocol.NonceReq, w io.W
 		return err
 	}
 
-	s.challenge = nonceResp.Nonce
+	s.nonce = nonceResp.Nonce
 	s.difficulty = nonceResp.Difficulty
 
 	if err := sendResp(nonceResp, w, s.codec); err != nil {
@@ -110,14 +110,14 @@ func (s *Service) onNonceReq(ctx context.Context, pkg *protocol.NonceReq, w io.W
 }
 
 func (s *Service) onDataReq(ctx context.Context, pkg *protocol.DataReq, w io.Writer) error {
-	ok, err := pow.CheckSolution(s.challenge, pkg.CNonce, s.difficulty)
+	ok, err := pow.CheckSolution(s.nonce, pkg.CNonce, s.difficulty)
 	if err != nil {
 		return pkgerr.Wrap(err, "client service failed to check challenge solution")
 	}
 
 	if !ok {
 		zap.L().Debug("Bad challenge solution",
-			zap.ByteString("challenge", s.challenge),
+			zap.ByteString("nonce", s.nonce),
 			zap.ByteString("solution", pkg.CNonce),
 			zap.Int("difficulty", s.difficulty),
 		)
@@ -138,6 +138,9 @@ func (s *Service) onDataReq(ctx context.Context, pkg *protocol.DataReq, w io.Wri
 	if err := sendResp(&protocol.DataResp{Payload: []byte(quote)}, w, s.codec); err != nil {
 		return err
 	}
+
+	s.nonce = s.nonce[:0]
+	s.difficulty = s.maxDifficulty
 
 	return nil
 }

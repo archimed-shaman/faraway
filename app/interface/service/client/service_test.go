@@ -81,7 +81,7 @@ func TestService_onDataReq_Success(t *testing.T) {
 	ctx := context.Background()
 	writer := &bytes.Buffer{}
 
-	svc.challenge = []byte("challenge")
+	svc.nonce = []byte("challenge")
 	svc.difficulty = 1
 
 	mockUserLogic.EXPECT().GetQuote(gomock.Any()).Return("test quote", nil)
@@ -114,6 +114,7 @@ func TestService_onDataReq_Success(t *testing.T) {
 
 	test.Nil(t, "Unmarshal DataResp error", err)
 	test.Check(t, "DataResp", *dataResp, returnedDataResp)
+	test.Check(t, "Nonce is cleaned up", []byte{}, svc.nonce)
 }
 
 func TestService_onDataReq_BadSolution(t *testing.T) {
@@ -131,7 +132,7 @@ func TestService_onDataReq_BadSolution(t *testing.T) {
 	ctx := context.Background()
 	writer := &bytes.Buffer{}
 
-	svc.challenge = []byte("challenge")
+	svc.nonce = []byte("challenge")
 	svc.difficulty = 1
 
 	errorResp := &protocol.ErrorResp{
