@@ -1,3 +1,10 @@
+## [1.2.4](https://github.com/archimed-shaman/faraway/compare/v1.2.3...v1.2.4) (2024-05-27)
+
+
+### Bug Fixes
+
+* Clean nonce after usage ([#9](https://github.com/archimed-shaman/faraway/issues/9)) ([a98b277](https://github.com/archimed-shaman/faraway/commit/a98b277bdff5a5c408c7e3020fee1471a8d6a2dc))
+
 ## [1.2.3](https://github.com/archimed-shaman/faraway/compare/v1.2.2...v1.2.3) (2024-05-26)
 
 
